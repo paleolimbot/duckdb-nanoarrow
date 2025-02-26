@@ -49,6 +49,10 @@ class IPCStreamReader {
   const ArrowSchema* GetOutputSchema();
   //! Gets the next batch
   bool GetNextBatch(ArrowArray* out);
+  //! Gets the unique buffer to get the next batch
+  virtual nanoarrow::UniqueBuffer GetUniqueBuffer() {
+    throw InternalException("IPCStreamReader::GetUniqueBuffer not implemented");
+  };
 
   //! Sets the projection pushdown for this reader
   void SetColumnProjection(const vector<string>& column_names);
@@ -62,14 +66,22 @@ class IPCStreamReader {
   }
 
  protected:
-  virtual void EnsureInputStreamAligned() {
-    //! nop by default. This method is called in the DecodeMessage() and necessary only
-    //! for the file reader, for the buffer reader it does nothing.
-  }
-  virtual void ReadData(data_ptr_t ptr, idx_t size) {
+  virtual data_ptr_t ReadData(data_ptr_t ptr, idx_t size) {
     throw InternalException("IPCStreamReader::ReadData not implemented");
   }
+  //! Decode Message is composed of 3 steps
   ArrowIpcMessageType DecodeMessage();
+  //! 1. We decode the message metadata, and return the message_header_size
+  idx_t DecodeMetadata() const;
+  //! 2. We decode the message head, if message is finished we return true
+  virtual bool DecodeHeader(idx_t message_header_size) {
+    throw InternalException("IPCStreamReader::DecodeHead not implemented");
+  }
+  //! 3. We decode the message body
+  virtual void DecodeBody() {
+    throw InternalException("IPCStreamReader::DecodeBody not implemented");
+  }
+
   bool HasProjection() const;
   static nanoarrow::ipc::UniqueDecoder NewDuckDBArrowDecoder();
 
@@ -98,8 +110,6 @@ class IPCStreamReader {
   bool finished{false};
 
   ArrowIpcMessagePrefix message_prefix{};
-  AllocatedData message_header;
-  shared_ptr<AllocatedData> message_body;
 };
 
 }  // namespace ext_nanoarrow

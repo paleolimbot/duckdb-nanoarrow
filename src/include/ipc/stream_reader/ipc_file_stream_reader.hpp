@@ -25,13 +25,17 @@ class IPCFileStreamReader final : public IPCStreamReader {
   static constexpr uint32_t kContinuationToken = 0xFFFFFFFF;
 
   BufferedFileReader file_reader;
+  AllocatedData message_header;
+  shared_ptr<AllocatedData> message_body;
 
-  void EnsureInputStreamAligned() override;
+  void EnsureInputStreamAligned();
 
-  void ReadData(data_ptr_t ptr, idx_t size) override;
+  data_ptr_t ReadData(data_ptr_t ptr, idx_t size) override;
   static void DecodeArray(nanoarrow::ipc::UniqueDecoder& decoder, ArrowArray* out,
                           ArrowBufferView& body_view, ArrowError* error);
-
+  bool DecodeHeader(idx_t message_header_size) override;
+  void DecodeBody() override;
+  nanoarrow::UniqueBuffer GetUniqueBuffer() override;
   void PopulateNames(vector<string>& names);
 };
 

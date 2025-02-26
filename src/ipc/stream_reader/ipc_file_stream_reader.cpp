@@ -33,8 +33,56 @@ void IPCFileStreamReader::DecodeArray(nanoarrow::ipc::UniqueDecoder& decoder,
   ArrowArrayMove(array.get(), out);
 }
 
-void IPCFileStreamReader::ReadData(data_ptr_t ptr, idx_t size) {
+nanoarrow::UniqueBuffer IPCFileStreamReader::GetUniqueBuffer() {
+  return AllocatedDataToOwningBuffer(message_body);
+}
+bool IPCFileStreamReader::DecodeHeader(const idx_t message_header_size) {
+  if (message_header.GetSize() < message_header_size) {
+    message_header = allocator.Allocate(message_header_size);
+  }
+  // Read the message header. I believe the fact that this loops and calls
+  // the file handle's Read() method with relatively small chunks will ensure that
+  // an attempt to read a very large message_header_size can be cancelled. If this
+  // is not the case, we might want to implement our own buffering.
+  std::memcpy(message_header.get(), &message_prefix, sizeof(message_prefix));
+  ReadData(message_header.get() + sizeof(message_prefix), message_prefix.metadata_size);
+
+  ArrowErrorCode decode_header_status = ArrowIpcDecoderDecodeHeader(
+      decoder.get(),
+      AllocatedDataView(message_header.get(),
+                        static_cast<int64_t>(message_header.GetSize())),
+      &error);
+  if (decode_header_status == ENODATA) {
+    finished = true;
+    return true;
+  }
+  THROW_NOT_OK(IOException, &error, decode_header_status);
+  return false;
+}
+
+void IPCFileStreamReader::DecodeBody() {
+  if (decoder->body_size_bytes > 0) {
+    EnsureInputStreamAligned();
+    message_body =
+        make_shared_ptr<AllocatedData>(allocator.Allocate(decoder->body_size_bytes));
+
+    // Again, this is possibly a long running Read() call for a large body.
+    // We could possibly be smarter about how we do this, particularly if we
+    // are reading a small portion of the input from a seekable file.
+    ReadData(message_body->get(), decoder->body_size_bytes);
+  }
+  if (message_body) {
+    cur_ptr = message_body->get();
+    cur_size = static_cast<int64_t>(message_body->GetSize());
+  } else {
+    cur_ptr = nullptr;
+    cur_size = 0;
+  }
+}
+
+data_ptr_t IPCFileStreamReader::ReadData(data_ptr_t ptr, idx_t size) {
   file_reader.ReadData(ptr, size);
+  return ptr;
 }
 
 ArrowIpcMessageType IPCFileStreamReader::ReadNextMessage() {
@@ -52,7 +100,6 @@ ArrowIpcMessageType IPCFileStreamReader::ReadNextMessage() {
     finished = true;
     return NANOARROW_IPC_MESSAGE_TYPE_UNINITIALIZED;
   }
-
   // If we're at the beginning of the read, and we see the Arrow file format
   // header bytes, skip them and try to read the stream anyway. This works because
   // there's a full stream within an Arrow file (including the EOS indicator, which

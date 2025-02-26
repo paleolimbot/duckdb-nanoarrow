@@ -13,6 +13,12 @@
 namespace duckdb {
 namespace ext_nanoarrow {
 
+struct IPCBuffer {
+  idx_t pos = 0;
+  data_ptr_t ptr = nullptr;
+  int64_t size = 0;
+};
+
 //! Buffer Stream
 class IPCBufferStreamReader final : public IPCStreamReader {
  public:
@@ -21,12 +27,15 @@ class IPCBufferStreamReader final : public IPCStreamReader {
   ArrowIpcMessageType ReadNextMessage() override;
 
  private:
-  void ReadData(data_ptr_t ptr, idx_t size) override;
+  data_ptr_t ReadData(data_ptr_t ptr, idx_t size) override;
+  bool DecodeHeader(idx_t message_header_size) override;
+  void DecodeBody() override;
+  nanoarrow::UniqueBuffer GetUniqueBuffer() override;
   vector<ArrowIPCBuffer> buffers;
   idx_t cur_idx = 0;
-  idx_t cur_buffer_pos = 0;
-  data_ptr_t cur_buffer_ptr = nullptr;
-  int64_t cur_buffer_size = 0;
+  IPCBuffer header;
+  IPCBuffer body;
+  IPCBuffer cur_buffer;
   bool initialized = false;
 };
 
