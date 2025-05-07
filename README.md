@@ -13,7 +13,7 @@ LOAD nanoarrow;
 SELECT
     commit, message
   FROM
-    read_arrow_stream('https://github.com/apache/arrow-experiments/raw/refs/heads/main/data/arrow-commits/arrow-commits.arrows')
+    read_arrow('https://github.com/apache/arrow-experiments/raw/refs/heads/main/data/arrow-commits/arrow-commits.arrows')
   LIMIT 10;
 ```
 
