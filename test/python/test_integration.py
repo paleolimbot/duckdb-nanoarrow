@@ -60,7 +60,7 @@ def compare_result(arrow_result, duckdb_result, con):
 # 1. Compare result from reading the IPC file in Arrow, and in Duckdb
 def compare_ipc_file_reader(con, file):
     arrow_result = ipc.open_stream(file).read_all()
-    duckdb_file_result = con.sql(f"FROM read_arrow('{file}')").arrow()
+    duckdb_file_result = con.sql(f"FROM read_arrow('{file}')").to_arrow_table()
     assert compare_result(arrow_result, duckdb_file_result, con)
 
 
@@ -70,7 +70,7 @@ def compare_ipc_file_writer(con, file):
     with tempfile.TemporaryDirectory() as temp_dir:
         file_path = os.path.join(temp_dir, "arrow_duck.arrows")
         con.execute(f"COPY (FROM read_arrow('{file}')) TO '{file_path}'")
-        duckdb_file_result = con.sql(f"FROM read_arrow('{file}')").arrow()
+        duckdb_file_result = con.sql(f"FROM read_arrow('{file}')").to_arrow_table()
         assert compare_result(arrow_result, duckdb_file_result, con)
 
 
@@ -78,7 +78,7 @@ def compare_ipc_file_writer(con, file):
 def compare_ipc_buffer_reader(con, file):
     arrow_result = ipc.open_stream(file).read_all()
     reader = mr.open_stream(file)
-    duckdb_struct_result = con.from_arrow(reader).arrow()
+    duckdb_struct_result = con.from_arrow(reader).to_arrow_table()
     assert compare_result(arrow_result, duckdb_struct_result, con)
 
 
