@@ -39,7 +39,7 @@ unique_ptr<LocalTableFunctionState> ToArrowIPCFunction::InitLocal(
   auto properties = context.client.GetClientProperties();
   local_state->serializer = make_uniq<ColumnDataCollectionSerializer>(
       properties, BufferAllocator::Get(context.client));
-  return local_state;
+  return std::move(local_state);
 }
 
 unique_ptr<GlobalTableFunctionState> ToArrowIPCFunction::InitGlobal(
