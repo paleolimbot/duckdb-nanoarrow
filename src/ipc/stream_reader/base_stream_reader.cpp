@@ -213,11 +213,11 @@ void IPCStreamReader::SetColumnProjection(const vector<string>& column_names) {
 
 idx_t IPCStreamReader::DecodeMetadata() const {
   idx_t metadata_size;
-  if (!Radix::IsLittleEndian()) {
-    metadata_size = static_cast<int32_t>(BSWAP32(message_prefix.metadata_size));
-  } else {
-    metadata_size = message_prefix.metadata_size;
-  }
+#if DUCKDB_IS_BIG_ENDIAN
+  metadata_size = static_cast<int32_t>(BSWAP32(message_prefix.metadata_size));
+#else
+  metadata_size = message_prefix.metadata_size;
+#endif
 
   if (metadata_size < 0) {
     throw IOException(std::string("Expected metadata size >= 0 but got " +

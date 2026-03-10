@@ -1,7 +1,5 @@
 #include "file_scanner/arrow_multi_file_info.hpp"
 
-#include "ipc/stream_reader/ipc_file_stream_reader.hpp"
-
 #include "duckdb/common/bind_helpers.hpp"
 #include "file_scanner/arrow_file_scan.hpp"
 #include "ipc/stream_factory.hpp"
@@ -115,13 +113,6 @@ shared_ptr<BaseFileReader> ArrowMultiFileInfo::CreateReader(
   return make_shared_ptr<ArrowFileScan>(context, file.path);
 }
 
-void ArrowMultiFileInfo::FinalizeReader(ClientContext& context, BaseFileReader& reader,
-                                        GlobalTableFunctionState&) {}
-
-void ArrowMultiFileInfo::FinishFile(ClientContext& context,
-                                    GlobalTableFunctionState& global_state,
-                                    BaseFileReader& reader) {}
-
 void ArrowMultiFileInfo::FinishReading(ClientContext& context,
                                        GlobalTableFunctionState& global_state,
                                        LocalTableFunctionState& local_state) {}
@@ -131,24 +122,6 @@ unique_ptr<NodeStatistics> ArrowMultiFileInfo::GetCardinality(
   // TODO: Here is where we might set statistics, for optimizations if we have them
   // e.g., cardinality from the file footer
   return make_uniq<NodeStatistics>();
-}
-
-unique_ptr<BaseStatistics> ArrowMultiFileInfo::GetStatistics(ClientContext& context,
-                                                             BaseFileReader& reader,
-                                                             const string& name) {
-  return nullptr;
-}
-
-double ArrowMultiFileInfo::GetProgressInFile(ClientContext& context,
-                                             const BaseFileReader& reader) {
-  auto& file_scan = reader.Cast<ArrowFileScan>();
-  if (!file_scan.factory->reader) {
-    // We are done with this file
-    return 100;
-  }
-  auto file_reader =
-      reinterpret_cast<IPCFileStreamReader*>(file_scan.factory->reader.get());
-  return file_reader->GetProgress();
 }
 
 void ArrowMultiFileInfo::GetVirtualColumns(ClientContext&, MultiFileBindData&,

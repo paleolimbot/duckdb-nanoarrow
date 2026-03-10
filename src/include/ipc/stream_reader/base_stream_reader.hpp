@@ -13,7 +13,7 @@
 
 #include "duckdb/common/allocator.hpp"
 #include "duckdb/common/file_system.hpp"
-#include "duckdb/common/radix.hpp"
+#include "duckdb/common/bswap.hpp"
 #include "duckdb/common/serializer/buffered_file_reader.hpp"
 #include "nanoarrow_errors.hpp"
 

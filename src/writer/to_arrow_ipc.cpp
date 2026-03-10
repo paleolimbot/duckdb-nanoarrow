@@ -3,6 +3,7 @@
 #include "writer/column_data_collection_serializer.hpp"
 
 #include "duckdb/common/arrow/arrow_appender.hpp"
+#include "duckdb/execution/physical_operator.hpp"
 #include "duckdb/function/function.hpp"
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/main/client_context.hpp"
@@ -108,7 +109,8 @@ OperatorResultType ToArrowIPCFunction::Function(ExecutionContext& context,
 
   bool sending_schema = false;
 
-  bool caching_disabled = !PhysicalOperator::OperatorCachingAllowed(context);
+  bool caching_disabled =
+      PhysicalOperator::SelectOperatorCachingMode(context) == OperatorCachingMode::NONE;
   local_state.serializer->Init(&data.schema, data.logical_types);
 
   if (!local_state.checked_schema) {

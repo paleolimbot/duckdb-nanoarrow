@@ -36,8 +36,7 @@ struct ScanArrowIPCFunction : ArrowTableFunction {
     res->factory->InitReader();
     res->factory->GetFileSchema(res->schema_root);
 
-    DBConfig& config = DatabaseInstance::GetDatabase(context).config;
-    PopulateArrowTableSchema(config, res->arrow_table, res->schema_root.arrow_schema);
+    PopulateArrowTableSchema(context, res->arrow_table, res->schema_root.arrow_schema);
     names = res->arrow_table.GetNames();
     return_types = res->arrow_table.GetTypes();
     res->all_types = return_types;
