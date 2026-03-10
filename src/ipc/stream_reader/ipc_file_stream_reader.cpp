@@ -115,6 +115,15 @@ ArrowIpcMessageType IPCFileStreamReader::ReadNextMessage() {
     // required.
     if (file_reader.CurrentOffset() == 8 &&
         std::memcmp("ARROW1\0\0", &message_prefix, 8) == 0) {
+      // Skip past any padding bytes until we reach the first 0xFF byte,
+      // which is the start of the continuation token (0xFFFFFFFF).
+      // The file format may pad well beyond the 8-byte magic for alignment.
+      uint8_t byte;
+      do {
+        file_reader.ReadData(&byte, 1);
+      } while (byte != 0xFF);
+      // Seek back so the next read picks up the full continuation token
+      file_reader.Seek(file_reader.CurrentOffset() - 1);
       return ReadNextMessage();
     }
 
