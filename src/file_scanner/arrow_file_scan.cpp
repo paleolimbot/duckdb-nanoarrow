@@ -82,8 +82,7 @@ double ArrowFileScan::GetProgressInFile(ClientContext& context) {
   if (!factory->reader) {
     return 100;
   }
-  auto file_reader =
-      static_cast<IPCFileStreamReader*>(factory->reader.get());
+  auto file_reader = static_cast<IPCFileStreamReader*>(factory->reader.get());
   return file_reader->GetProgress();
 }
 
