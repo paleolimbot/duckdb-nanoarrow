@@ -219,10 +219,6 @@ idx_t IPCStreamReader::DecodeMetadata() const {
   metadata_size = message_prefix.metadata_size;
 #endif
 
-  if (metadata_size < 0) {
-    throw IOException(std::string("Expected metadata size >= 0 but got " +
-                                  std::to_string(metadata_size)));
-  }
   return metadata_size + sizeof(message_prefix);
 }
 
