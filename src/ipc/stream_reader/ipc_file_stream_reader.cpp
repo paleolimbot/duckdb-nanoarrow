@@ -129,15 +129,13 @@ ArrowIpcMessageType IPCFileStreamReader::ReadNextMessage() {
       throw IOException(std::string("Expected continuation token (0xFFFFFFFF) but got " +
                                     std::to_string(message_prefix.continuation_token)));
     }
+
     // Decode the message
     return DecodeMessage();
-
   } catch (SerializationException& e) {
     finished = true;
     return NANOARROW_IPC_MESSAGE_TYPE_UNINITIALIZED;
   }
-
-  return DecodeMessage();
 }
 
 void IPCFileStreamReader::EnsureInputStreamAligned() {
