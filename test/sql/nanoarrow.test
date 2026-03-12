@@ -15,4 +15,4 @@ require nanoarrow
 query I
 SELECT nanoarrow_version();
 ----
-0.7.0-SNAPSHOT
+0.8.0
