@@ -2,19 +2,19 @@
 
 #include "file_scanner/arrow_file_scan.hpp"
 #include "file_scanner/arrow_multi_file_info.hpp"
+#include "ipc/stream_reader/ipc_file_stream_reader.hpp"
 
 namespace duckdb {
 namespace ext_nanoarrow {
 struct ArrowFileLocalState;
 
 ArrowFileScan::ArrowFileScan(ClientContext& context, const string& file_name)
-    : BaseFileReader(file_name) {
+    : BaseFileReader(OpenFileInfo(file_name)) {
   factory = make_uniq<FileIPCStreamFactory>(context, file_name);
 
   factory->InitReader();
   factory->GetFileSchema(schema_root);
-  DBConfig& config = DatabaseInstance::GetDatabase(context).config;
-  ArrowTableFunction::PopulateArrowTableSchema(config, arrow_table,
+  ArrowTableFunction::PopulateArrowTableSchema(context, arrow_table,
                                                schema_root.arrow_schema);
   names = arrow_table.GetNames();
   types = arrow_table.GetTypes();
@@ -67,14 +67,27 @@ bool ArrowFileScan::TryInitializeScan(ClientContext& context,
       lstate.local_arrow_global_state.get());
   return true;
 }
-void ArrowFileScan::Scan(ClientContext& context, GlobalTableFunctionState& global_state,
-                         LocalTableFunctionState& local_state, DataChunk& chunk) {
+AsyncResult ArrowFileScan::Scan(ClientContext& context,
+                                GlobalTableFunctionState& global_state,
+                                LocalTableFunctionState& local_state, DataChunk& chunk) {
   auto& lstate = local_state.Cast<ArrowFileLocalState>();
   ArrowTableFunction::ArrowScanFunction(context, *lstate.table_function_input, chunk);
+  if (chunk.size() == 0) {
+    return SourceResultType::FINISHED;
+  }
+  return SourceResultType::HAVE_MORE_OUTPUT;
+}
+
+double ArrowFileScan::GetProgressInFile(ClientContext& context) {
+  if (!factory->reader) {
+    return 100;
+  }
+  auto file_reader = static_cast<IPCFileStreamReader*>(factory->reader.get());
+  return file_reader->GetProgress();
 }
 
 shared_ptr<BaseUnionData> ArrowFileScan::GetUnionData(idx_t file_idx) {
-  auto data = make_shared_ptr<BaseUnionData>(GetFileName());
+  auto data = make_shared_ptr<BaseUnionData>(OpenFileInfo(GetFileName()));
   data->names = GetNames();
   data->types = GetTypes();
   return data;

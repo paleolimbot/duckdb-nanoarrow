@@ -11,6 +11,7 @@
 #include "ipc/stream_factory.hpp"
 
 #include "duckdb/common/multi_file/base_file_reader.hpp"
+#include "duckdb/parallel/async_result.hpp"
 
 namespace duckdb {
 namespace ext_nanoarrow {
@@ -36,8 +37,9 @@ class ArrowFileScan : public BaseFileReader {
 
   bool TryInitializeScan(ClientContext& context, GlobalTableFunctionState& gstate,
                          LocalTableFunctionState& lstate) override;
-  void Scan(ClientContext& context, GlobalTableFunctionState& global_state,
-            LocalTableFunctionState& local_state, DataChunk& chunk) override;
+  AsyncResult Scan(ClientContext& context, GlobalTableFunctionState& global_state,
+                   LocalTableFunctionState& local_state, DataChunk& chunk) override;
+  double GetProgressInFile(ClientContext& context) override;
 
   shared_ptr<BaseUnionData> GetUnionData(idx_t file_idx) override;
 

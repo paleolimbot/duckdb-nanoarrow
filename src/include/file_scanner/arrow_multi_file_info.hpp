@@ -111,23 +111,11 @@ struct ArrowMultiFileInfo : MultiFileReaderInterface {
                                           BaseFileReaderOptions& options,
                                           const MultiFileOptions& file_options) override;
 
-  static void FinalizeReader(ClientContext& context, BaseFileReader& reader,
-                             GlobalTableFunctionState&);
-
-  static void FinishFile(ClientContext& context, GlobalTableFunctionState& global_state,
-                         BaseFileReader& reader);
-
   void FinishReading(ClientContext& context, GlobalTableFunctionState& global_state,
                      LocalTableFunctionState& local_state) override;
 
   unique_ptr<NodeStatistics> GetCardinality(const MultiFileBindData& bind_data,
                                             idx_t file_count) override;
-
-  static unique_ptr<BaseStatistics> GetStatistics(ClientContext& context,
-                                                  BaseFileReader& reader,
-                                                  const string& name);
-
-  static double GetProgressInFile(ClientContext& context, const BaseFileReader& reader);
 
   void GetVirtualColumns(ClientContext& context, MultiFileBindData& bind_data,
                          virtual_column_map_t& result) override;

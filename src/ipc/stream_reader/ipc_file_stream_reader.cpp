@@ -115,20 +115,27 @@ ArrowIpcMessageType IPCFileStreamReader::ReadNextMessage() {
     // required.
     if (file_reader.CurrentOffset() == 8 &&
         std::memcmp("ARROW1\0\0", &message_prefix, 8) == 0) {
-      return ReadNextMessage();
-    }
-
-    if (message_prefix.continuation_token != kContinuationToken) {
+      // We're at the beginning of the file. Skip upto and including the continuation
+      // token
+      uint32_t token;
+      do {
+        file_reader.ReadData(reinterpret_cast<data_ptr_t>(&token), sizeof(token));
+      } while (token != kContinuationToken);
+      // Read the metadata size
+      message_prefix.continuation_token = kContinuationToken;
+      file_reader.ReadData(reinterpret_cast<data_ptr_t>(&message_prefix.metadata_size),
+                           sizeof(message_prefix.metadata_size));
+    } else if (message_prefix.continuation_token != kContinuationToken) {
       throw IOException(std::string("Expected continuation token (0xFFFFFFFF) but got " +
                                     std::to_string(message_prefix.continuation_token)));
     }
 
+    // Decode the message
+    return DecodeMessage();
   } catch (SerializationException& e) {
     finished = true;
     return NANOARROW_IPC_MESSAGE_TYPE_UNINITIALIZED;
   }
-
-  return DecodeMessage();
 }
 
 void IPCFileStreamReader::EnsureInputStreamAligned() {
