@@ -38,3 +38,36 @@ class TestArrowIPCBufferWriter(object):
             batches.extend(stream_reader)
         arrow_table = pa.Table.from_batches(batches, schema=schema)
         tables_match(connection.execute("FROM arrow_table").fetchall())
+
+    def test_round_trip_multiple_batches(self, connection):
+        # Big enough to be split over several IPC record batches, so the
+        # serializer runs more than once for a single query. A batch holds
+        # 120 * STANDARD_VECTOR_SIZE rows, so keep this comfortably above that
+        # for any vector size the build might use.
+        source = """
+            SELECT i,
+                   i::VARCHAR AS s,
+                   i % 7 = 0 AS f,
+                   CASE WHEN i % 11 = 0 THEN NULL ELSE i * 2 END AS n
+            FROM range(1200000) t(i)
+        """
+        buffers = connection.execute(f"FROM to_arrow_ipc(({source}))").fetchall()
+        assert len(buffers) > 2, "expected more than one data message"
+        assert [header for _, header in buffers] == [True] + [False] * (len(buffers) - 1)
+
+        schema_message = buffers[0][0]
+        batches = []
+        for payload, _ in buffers[1:]:
+            with pa.BufferReader(pa.py_buffer(schema_message + payload)) as reader:
+                stream_reader = ipc.RecordBatchStreamReader(reader)
+                schema = stream_reader.schema
+                batches.extend(stream_reader)
+
+        arrow_table = pa.Table.from_batches(batches, schema=schema)
+        assert connection.execute(
+            f"""
+            SELECT (SELECT count(*) FROM arrow_table),
+                   (SELECT count(*) FROM (({source}) EXCEPT ALL FROM arrow_table)),
+                   (SELECT count(*) FROM (FROM arrow_table EXCEPT ALL ({source})))
+            """
+        ).fetchone() == (1200000, 0, 0)

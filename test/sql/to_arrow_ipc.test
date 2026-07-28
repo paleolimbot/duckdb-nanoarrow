@@ -25,3 +25,37 @@ WITH data_union AS (
     SELECT * FROM data
 )
 FROM to_arrow_ipc((SELECT * FROM data_union ORDER BY col))
+
+# A result bigger than one IPC batch makes the serializer run several times per
+# query, which no other test in this file reaches. A batch holds
+# 120 * STANDARD_VECTOR_SIZE rows, so the row count has to stay comfortably
+# above that for every vector size the build might use -- do not trim it. The
+# resulting number of data messages varies with the vector size, so only assert
+# that there is more than one, behind a single schema message.
+query III
+SELECT count(*) FILTER (WHERE header),
+       count(*) FILTER (WHERE NOT header) >= 2,
+       min(octet_length(ipc)) > 0
+FROM to_arrow_ipc((
+    SELECT i,
+           i::VARCHAR AS s,
+           i % 7 = 0 AS f,
+           CASE WHEN i % 11 = 0 THEN NULL ELSE i END AS n
+    FROM range(1200000) t(i)
+))
+----
+1	true	true
+
+# Two independent evaluations of the same input have to emit the same messages,
+# byte for byte. This is a determinism check on the serializer's reused state,
+# not a guard on the array's ownership: Serialize() copies the body out before
+# SerializeArray() releases the array, so releasing it too early would corrupt
+# or crash rather than surface as a difference here.
+query II
+WITH q AS (SELECT i, i::VARCHAR AS s FROM range(1200000) t(i)),
+     run_a AS MATERIALIZED (SELECT ipc FROM to_arrow_ipc((FROM q))),
+     run_b AS MATERIALIZED (SELECT ipc FROM to_arrow_ipc((FROM q)))
+SELECT (SELECT count(*) FROM run_a) = (SELECT count(*) FROM run_b),
+       (SELECT count(*) FROM (FROM run_a EXCEPT ALL FROM run_b))
+----
+true	0
