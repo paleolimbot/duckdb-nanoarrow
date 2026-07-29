@@ -15,7 +15,7 @@ namespace ext_nanoarrow {
 
 struct ToArrowIpcFunctionData : public TableFunctionData {
   ToArrowIpcFunctionData() = default;
-  ArrowSchema schema{};
+  nanoarrow::UniqueSchema schema;
   vector<LogicalType> logical_types;
   const idx_t chunk_size = ToArrowIPCFunction::DEFAULT_CHUNK_SIZE * STANDARD_VECTOR_SIZE;
 };
@@ -40,6 +40,10 @@ unique_ptr<LocalTableFunctionState> ToArrowIPCFunction::InitLocal(
   auto properties = context.client.GetClientProperties();
   local_state->serializer = make_uniq<ColumnDataCollectionSerializer>(
       properties, BufferAllocator::Get(context.client));
+  // Init() allocates an encoder and an array view, so it belongs here and not
+  // in Function(), which runs for every incoming chunk.
+  auto& data = input.bind_data->Cast<ToArrowIpcFunctionData>();
+  local_state->serializer->Init(data.schema.get(), data.logical_types);
   return std::move(local_state);
 }
 
@@ -63,15 +67,16 @@ unique_ptr<FunctionData> ToArrowIPCFunction::Bind(ClientContext& context,
   // Create the Arrow schema
   auto properties = context.GetClientProperties();
   result->logical_types = input.input_table_types;
-  ArrowConverter::ToArrowSchema(&result->schema, input.input_table_types,
+  ArrowConverter::ToArrowSchema(result->schema.get(), input.input_table_types,
                                 input.input_table_names, properties);
   return std::move(result);
 }
 
 void SerializeArray(const ToArrowIpcLocalState& local_state,
                     nanoarrow::UniqueBuffer& arrow_serialized_ipc_buffer) {
-  ArrowArray arr = local_state.appender->Finalize();
-  local_state.serializer->Serialize(arr);
+  ArrowArray finalized = local_state.appender->Finalize();
+  nanoarrow::UniqueArray arr(&finalized);
+  local_state.serializer->Serialize(*arr.get());
   arrow_serialized_ipc_buffer = local_state.serializer->GetHeader();
   auto body = local_state.serializer->GetBody();
   idx_t ipc_buffer_size = arrow_serialized_ipc_buffer->size_bytes;
@@ -111,7 +116,6 @@ OperatorResultType ToArrowIPCFunction::Function(ExecutionContext& context,
 
   bool caching_disabled =
       PhysicalOperator::SelectOperatorCachingMode(context) == OperatorCachingMode::NONE;
-  local_state.serializer->Init(&data.schema, data.logical_types);
 
   if (!local_state.checked_schema) {
     if (!global_state.sent_schema) {

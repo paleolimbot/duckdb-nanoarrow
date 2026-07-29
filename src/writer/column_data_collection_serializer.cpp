@@ -42,6 +42,12 @@ ColumnDataCollectionSerializer::ColumnDataCollectionSerializer(ClientProperties 
 
 void ColumnDataCollectionSerializer::Init(const ArrowSchema* schema_p,
                                           const vector<LogicalType>& logical_types) {
+  header.reset();
+  body.reset();
+  encoder.reset();
+  chunk_view.reset();
+  chunk_arrow.reset();
+
   InitArrowDuckBuffer(header.get(), allocator);
   InitArrowDuckBuffer(body.get(), allocator);
   NANOARROW_THROW_NOT_OK(ArrowIpcEncoderInit(encoder.get()));
