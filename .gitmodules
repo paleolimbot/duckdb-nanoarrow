@@ -1,11 +1,11 @@
 [submodule "duckdb"]
 	path = duckdb
 	url = https://github.com/duckdb/duckdb
-	branch = main
+	branch = v1.5-variegata
 [submodule "extension-ci-tools"]
 	path = extension-ci-tools
 	url = https://github.com/duckdb/extension-ci-tools
-	branch = main
+	branch = v1.5-variegata
 [submodule "arrow-testing"]
 	path = arrow-testing
 	url = https://github.com/apache/arrow-testing.git

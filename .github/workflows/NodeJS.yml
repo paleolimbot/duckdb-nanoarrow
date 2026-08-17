@@ -1,4 +1,6 @@
-on: [push, pull_request,repository_dispatch,workflow_dispatch]
+name: NodeJS
+
+on: [push, pull_request, repository_dispatch, workflow_dispatch]
 
 defaults:
   run:
@@ -6,7 +8,6 @@ defaults:
 
 jobs:
   nodejs:
-    if: github.ref == 'refs/heads/stable'
     name: NodeJS
     runs-on: macos-latest
     env:
@@ -16,12 +17,12 @@ jobs:
       - name: Install Ninja
         run: brew install ninja
 
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           submodules: 'true'
 
-      - uses: actions/setup-python@v2
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.9'
 
@@ -31,18 +32,18 @@ jobs:
 
       - name: Install required node packages
         run: |
-          sudo npm i duckdb@1.2.1
-          sudo npm install -g  apache-arrow mocha
-          sudo npm install  apache-arrow mocha
+          npm install @duckdb/node-api@1.5.5-r.4 apache-arrow mocha --no-audit --no-fund
+          echo "$(pwd)/node_modules/.bin" >> $GITHUB_PATH
           npm -v
           node -v
 
       - name: Build duckdb
         run: |
           cd duckdb
-          git checkout 8e52ec43959ab363643d63cb78ee214577111da4 #v1.2.1
+          git fetch --tags
+          git checkout v1.5-variegata
           cd ..
-          make
+          GEN=ninja make release
 
       - name: Run JS tests
         run: |

@@ -1,51 +1,47 @@
-on: [push, pull_request,repository_dispatch]
-
+name: Python
+on: [push, pull_request, repository_dispatch]
 defaults:
   run:
     shell: bash
-
 jobs:
   python:
     name: Python
     runs-on: macos-latest
     env:
       GEN: ninja
-
     steps:
-    - name: Install Ninja
-      run: brew install ninja
-
-    - uses: actions/checkout@v2
-      with:
-        fetch-depth: 0
-        submodules: true
-
-    - uses: actions/setup-python@v2
-      with:
-        python-version: '3.11'
-
-    - name: Checkout DuckDB Python
-      uses: actions/checkout@v4
-      with:
-        repository: duckdb/duckdb-python
-        ref: v1.5.0
-        path: duckdb-python
-        fetch-depth: 0
-        submodules: true
-
-    - name: Build DuckDB (Python)
-      run: |
-        cd duckdb-python
-        python3 -m pip install .
-
-    - name: Build Arrow Extension
-      run: make release
-
-    - name: Install Python Dependencies
-      shell: bash
-      run: |
-        pip install -r test/python/requirements-dev.txt
-
-    - name: Test Python
-      run: |
-        (cd test/python && python -m pytest)
+      - name: Install Ninja
+        run: brew install ninja
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Checkout DuckDB Python
+        uses: actions/checkout@v4
+        with:
+          repository: duckdb/duckdb-python
+          ref: v1.5-variegata
+          path: duckdb-python
+          fetch-depth: 0
+          submodules: true
+      - name: Build DuckDB (Python)
+        run: |
+          cd duckdb-python
+          git submodule set-url external/duckdb "$GITHUB_WORKSPACE/duckdb"
+          git submodule sync external/duckdb
+          git submodule update --init --force external/duckdb
+          DUCKDB_SHA=$(git -C "$GITHUB_WORKSPACE/duckdb" rev-parse HEAD)
+          git -C external/duckdb fetch origin "$DUCKDB_SHA"
+          git -C external/duckdb checkout "$DUCKDB_SHA"
+          python3 -m pip install .
+      - name: Build Arrow Extension
+        run: GEN=ninja make release
+      - name: Install Python Dependencies
+        run: |
+          pip install -r test/python/requirements-dev.txt
+      - name: Test Python
+        run: |
+          (cd test/python && python -m pytest)
