@@ -7,8 +7,8 @@ set(TARGET_NAME nanoarrow)
 set(NANOARROW_IPC ON)
 set(NANOARROW_NAMESPACE "DuckDBExt${TARGET_NAME}")
 fetchcontent_declare(nanoarrow
-                     URL "https://github.com/apache/arrow-nanoarrow/archive/4bf5a9322626e95e3717e43de7616c0a256179eb.zip"
-                     URL_HASH SHA256=49d588ee758a2a1d099ed4525c583a04adf71ce40405011e0190aa1e75e61b59
+                     URL "https://github.com/apache/arrow-nanoarrow/releases/download/apache-arrow-nanoarrow-0.8.0/apache-arrow-nanoarrow-0.8.0.tar.gz"
+                     URL_HASH SHA256=6e61e2819c9138e9092ba32b568ed6f4594928b306171937251eaaafa7dc2b8c
 )
 fetchcontent_makeavailable(nanoarrow)
 
