@@ -110,7 +110,6 @@ async function getDatabase() {
 
 async function getConnection(db) {
     const conn = await db.connect();
-    await conn.run(`SET allow_extensions_metadata_mismatch=true;`);
     if (process.env.ARROW_EXTENSION_BINARY_PATH) {
         try {
             await conn.run(`LOAD '${process.env.ARROW_EXTENSION_BINARY_PATH}';`);
