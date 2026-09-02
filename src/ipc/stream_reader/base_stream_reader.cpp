@@ -95,14 +95,14 @@ bool IPCStreamReader::GetNextBatch(ArrowArray* out) {
     return false;
   }
 
-  // Use the ArrowIpcSharedBuffer if we have thread safety (i.e., if this was
+  // Use the ArrowSharedBuffer if we have thread safety (i.e., if this was
   // compiled with a compiler that supports C11 atomics, i.e., not gcc 4.8 or
   // MSVC)
-  bool thread_safe_shared = ArrowIpcSharedBufferIsThreadSafe();
+  bool thread_safe_shared = ArrowSharedBufferIsThreadSafe();
   struct ArrowBufferView body_view = AllocatedDataView(cur_ptr, cur_size);
   nanoarrow::UniqueBuffer body_shared = GetUniqueBuffer();
-  UniqueSharedBuffer shared;
-  NANOARROW_THROW_NOT_OK(ArrowIpcSharedBufferInit(&shared.data, body_shared.get()));
+  nanoarrow::UniqueBuffer shared;
+  NANOARROW_THROW_NOT_OK(ArrowSharedBufferInit(shared.get(), body_shared.get()));
   nanoarrow::UniqueArray array;
   if (HasProjection()) {
     NANOARROW_THROW_NOT_OK(ArrowArrayInitFromType(array.get(), NANOARROW_TYPE_STRUCT));
@@ -113,7 +113,7 @@ bool IPCStreamReader::GetNextBatch(ArrowArray* out) {
       for (int64_t i = 0; i < array->n_children; i++) {
         THROW_NOT_OK(InternalException, &error,
                      ArrowIpcDecoderDecodeArrayFromShared(
-                         decoder.get(), &shared.data, projected_fields[i],
+                         decoder.get(), shared.get(), projected_fields[i],
                          array->children[i], NANOARROW_VALIDATION_LEVEL_FULL, &error));
       }
     } else {
@@ -131,7 +131,7 @@ bool IPCStreamReader::GetNextBatch(ArrowArray* out) {
   } else if (thread_safe_shared) {
     THROW_NOT_OK(
         InternalException, &error,
-        ArrowIpcDecoderDecodeArrayFromShared(decoder.get(), &shared.data, -1, array.get(),
+        ArrowIpcDecoderDecodeArrayFromShared(decoder.get(), shared.get(), -1, array.get(),
                                              NANOARROW_VALIDATION_LEVEL_FULL, &error));
   } else {
     THROW_NOT_OK(InternalException, &error,

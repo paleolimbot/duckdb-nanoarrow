@@ -22,17 +22,6 @@
 namespace duckdb {
 namespace ext_nanoarrow {
 
-//! Missing in nanoarrow_ipc.hpp
-struct UniqueSharedBuffer {
-  struct ArrowIpcSharedBuffer data{};
-
-  ~UniqueSharedBuffer() {
-    if (data.private_src.allocator.free != nullptr) {
-      ArrowIpcSharedBufferReset(&data);
-    }
-  }
-};
-
 struct ArrowIpcMessagePrefix {
   uint32_t continuation_token;
   int32_t metadata_size;
