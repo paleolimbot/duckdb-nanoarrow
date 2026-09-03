@@ -41,13 +41,10 @@ jobs:
         run: |
           cd duckdb
           git fetch --tags
-          git checkout v1.5-variegata
+          git checkout v1.5.5
           cd ..
           GEN=ninja make release
 
       - name: Run JS tests
         run: |
-          ARROW_EXTENSION_BINARY_PATH="$(pwd)/build/release/extension/nanoarrow/nanoarrow.duckdb_extension" \
-            lldb --batch -o run -k "thread backtrace all" -- \
-            node --expose-gc node_modules/mocha/bin/mocha.js -R spec \
-            --timeout 480000 --exclude 'test/*.ts' -- "test/nodejs/**/*.js"
+          make test_release_js
