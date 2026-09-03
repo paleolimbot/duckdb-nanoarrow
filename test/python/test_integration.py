@@ -31,6 +31,10 @@ little_big_integration_files = [
     "generated_primitive_zerolength.stream",
     "generated_primitive.stream",
     "generated_recursive_nested.stream",
+    # TODO: Uncomment this after adding support for dictionaries
+    # "generated_dictionary.stream",
+    # "generated_dictionary_unsigned.stream",
+    # "generated_nested_dictionary.stream",
 ]
 
 compression_2_0_0 = ["generated_uncompressible_zstd.stream", "generated_zstd.stream"]

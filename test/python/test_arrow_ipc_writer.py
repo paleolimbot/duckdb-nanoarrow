@@ -71,3 +71,42 @@ class TestArrowIPCBufferWriter(object):
                    (SELECT count(*) FROM (FROM arrow_table EXCEPT ALL ({source})))
             """
         ).fetchone() == (1200000, 0, 0)
+
+    def test_dictionary_round_trip(self, connection):
+        connection.execute(
+            """
+            CREATE TABLE dict_t AS
+            SELECT CASE WHEN i % 2 = 0 THEN 'even' ELSE 'odd' END AS cat, i
+            FROM range(6) t(i)
+            """
+        )
+        buffers = connection.execute("FROM to_arrow_ipc((FROM dict_t))").fetchall()
+
+        arrow_buffers = [pa.py_buffer(buffers[0][0] + b[0]) for b in buffers[1:]]
+        batches = []
+        for buf in arrow_buffers:
+            with pa.BufferReader(buf) as reader:
+                stream_reader = ipc.RecordBatchStreamReader(reader)
+                batches.extend(stream_reader)
+
+        arrow_table = pa.Table.from_batches(batches, schema=stream_reader.schema)
+        result = connection.execute("FROM arrow_table").fetchall()
+        assert result == [("even", 0), ("odd", 1), ("even", 2), ("odd", 3), ("even", 4), ("odd", 5)]
+
+    def test_dictionary_to_arrow_ipc_from_pyarrow(self, connection):
+        indices = pa.array([0, 1, 1, 0])
+        dictionary = pa.array(["low", "high"])
+        dict_arr = pa.DictionaryArray.from_arrays(indices, dictionary)
+        arrow_table = pa.Table.from_arrays([dict_arr], names=["priority"])
+
+        buffers = connection.execute("FROM to_arrow_ipc((FROM arrow_table))").fetchall()
+        schema_msg = buffers[0][0]
+
+        batches = []
+        for payload, _ in buffers[1:]:
+            with pa.BufferReader(pa.py_buffer(schema_msg + payload)) as reader:
+                stream_reader = ipc.RecordBatchStreamReader(reader)
+                batches.extend(stream_reader)
+
+        result_table = pa.Table.from_batches(batches, schema=stream_reader.schema)
+        assert result_table.column("priority").to_pylist() == ["low", "high", "high", "low"]
