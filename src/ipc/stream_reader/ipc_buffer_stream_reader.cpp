@@ -58,6 +58,7 @@ bool IPCBufferStreamReader::DecodeHeader(idx_t message_header_size) {
 void IPCBufferStreamReader::DecodeBody() {
   if (decoder->body_size_bytes > 0) {
     body.ptr = ReadData(body.ptr, decoder->body_size_bytes);
+    body.size = decoder->body_size_bytes;
   }
   if (body.ptr) {
     cur_ptr = body.ptr;
