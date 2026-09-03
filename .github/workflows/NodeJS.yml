@@ -41,7 +41,7 @@ jobs:
         run: |
           cd duckdb
           git fetch --tags
-          git checkout v1.5-variegata
+          git checkout v1.5.5
           cd ..
           GEN=ninja make release
 
