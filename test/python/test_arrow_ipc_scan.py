@@ -79,7 +79,6 @@ class TestArrowIPCBufferRead(object):
             ):
                 connection.execute("FROM msg_reader")
 
-    @pytest.mark.skip(reason="Pending nanoarrow dictionary support")
     def test_dictionary_single_buffer(self, connection):
         indices = pa.array([0, 1, 0, 2, None, 1])
         dictionary = pa.array(["apple", "banana", "cherry"])
@@ -96,7 +95,6 @@ class TestArrowIPCBufferRead(object):
             res = connection.from_arrow(msg_reader).fetchall()
             assert res == [("apple",), ("banana",), ("apple",), ("cherry",), (None,), ("banana",)]
 
-    @pytest.mark.skip(reason="Pending nanoarrow dictionary support")
     def test_dictionary_multi_batch_stream(self, connection):
         indices1 = pa.array([0, 1])
         indices2 = pa.array([2, 0, None])
@@ -116,7 +114,6 @@ class TestArrowIPCBufferRead(object):
             res = connection.from_arrow(msg_reader).fetchall()
             assert res == [("alpha",), ("beta",), ("gamma",), ("alpha",), (None,)]
 
-    @pytest.mark.skip(reason="Pending nanoarrow dictionary support")
     def test_dictionary_unsigned_indices(self, connection):
         indices = pa.array([0, 1, 2], type=pa.uint8())
         dictionary = pa.array(["x", "y", "z"])
@@ -131,7 +128,6 @@ class TestArrowIPCBufferRead(object):
             msg_reader = ipc.MessageReader.open_stream(buf_reader)
             assert connection.from_arrow(msg_reader).fetchall() == [("x",), ("y",), ("z",)]
 
-    @pytest.mark.skip(reason="Pending nanoarrow dictionary support")
     def test_dictionary_null_in_values(self, connection):
         # Index points to a slot in the dictionary that is itself NULL
         indices = pa.array([0, 1, 2])
@@ -146,7 +142,6 @@ class TestArrowIPCBufferRead(object):
             msg_reader = ipc.MessageReader.open_stream(buf_reader)
             assert connection.from_arrow(msg_reader).fetchall() == [("apple",), (None,), ("cherry",)]
 
-    @pytest.mark.skip(reason="Pending nanoarrow dictionary support")
     def test_dictionary_shared_id(self, connection):
         # Two columns using the same dictionary
         dictionary = pa.array(["red", "green", "blue"])
@@ -168,7 +163,7 @@ class TestArrowIPCBufferRead(object):
             msg_reader = ipc.MessageReader.open_stream(buf_reader)
             assert connection.from_arrow(msg_reader).fetchall() == [("red", "blue"), ("green", "red")]
 
-    @pytest.mark.skip(reason="Pending nanoarrow dictionary support")
+    @pytest.mark.skip(reason="Nested dictionaries trigger a DuckDB Arrow conversion ownership error")
     def test_dictionary_inside_struct(self, connection):
         # Nested dictionary inside a Struct
         dictionary = pa.array(["low", "high"])
@@ -184,7 +179,6 @@ class TestArrowIPCBufferRead(object):
             msg_reader = ipc.MessageReader.open_stream(buf_reader)
             assert connection.from_arrow(msg_reader).fetchall() == [({'level': 'low'},), ({'level': 'high'},)]
 
-    @pytest.mark.skip(reason="Pending nanoarrow dictionary support")
     def test_dictionary_numeric_values(self, connection):
         indices = pa.array([0, 1, 0, None, 1], type=pa.int8())
         dictionary = pa.array([100.55, 200.75], type=pa.float64())
@@ -201,7 +195,6 @@ class TestArrowIPCBufferRead(object):
                 (100.55,), (200.75,), (100.55,), (None,), (200.75,)
             ]
 
-    @pytest.mark.skip(reason="Pending nanoarrow dictionary support")
     def test_dictionary_sliced_array(self, connection):
         indices = pa.array([0, 1, 2, 0, 1])
         dictionary = pa.array(["a", "b", "c"])
@@ -219,7 +212,7 @@ class TestArrowIPCBufferRead(object):
             msg_reader = ipc.MessageReader.open_stream(buf_reader)
             assert connection.from_arrow(msg_reader).fetchall() == [("c",), ("a",)]
 
-    @pytest.mark.skip(reason="Pending nanoarrow dictionary support")
+    @pytest.mark.skip(reason="nanoarrow cannot encode dictionary arrays")
     def test_duckdb_enum_to_arrow_ipc(self, connection):
         connection.execute("CREATE TYPE mood AS ENUM ('happy', 'sad', 'ok');")
         connection.execute("CREATE TABLE enum_t (id INT, m mood);")
@@ -241,7 +234,6 @@ class TestArrowIPCBufferRead(object):
             (1, "happy"), (2, "ok"), (3, None), (4, "sad")
         ]
 
-    @pytest.mark.skip(reason="Pending nanoarrow dictionary support")
     def test_dictionary_empty_batch(self, connection):
         indices = pa.array([], type=pa.int32())
         dictionary = pa.array(["unused"], type=pa.string())
@@ -256,7 +248,6 @@ class TestArrowIPCBufferRead(object):
             msg_reader = ipc.MessageReader.open_stream(buf_reader)
             assert connection.from_arrow(msg_reader).fetchall() == []
 
-    @pytest.mark.skip(reason="Pending nanoarrow dictionary support")
     def test_dictionary_large_string_values(self, connection):
         indices = pa.array([0, 1, 0])
         dictionary = pa.array(["v1", "v2"], type=pa.large_string())
