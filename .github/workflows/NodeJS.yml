@@ -48,6 +48,6 @@ jobs:
       - name: Run JS tests
         run: |
           ARROW_EXTENSION_BINARY_PATH="$(pwd)/build/release/extension/nanoarrow/nanoarrow.duckdb_extension" \
-            lldb --batch -o run -o "thread backtrace all" -- \
+            lldb --batch -o run -k "thread backtrace all" -- \
             node --expose-gc node_modules/mocha/bin/mocha.js -R spec \
             --timeout 480000 --exclude 'test/*.ts' -- "test/nodejs/**/*.js"
