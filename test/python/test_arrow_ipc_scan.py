@@ -163,7 +163,6 @@ class TestArrowIPCBufferRead(object):
             msg_reader = ipc.MessageReader.open_stream(buf_reader)
             assert connection.from_arrow(msg_reader).fetchall() == [("red", "blue"), ("green", "red")]
 
-    @pytest.mark.skip(reason="Nested dictionary IPC ownership is not propagated correctly (issue #56)")
     def test_dictionary_inside_struct(self, connection):
         # Nested dictionary inside a Struct
         dictionary = pa.array(["low", "high"])
@@ -178,6 +177,41 @@ class TestArrowIPCBufferRead(object):
         with pa.BufferReader(sink.getvalue()) as buf_reader:
             msg_reader = ipc.MessageReader.open_stream(buf_reader)
             assert connection.from_arrow(msg_reader).fetchall() == [({'level': 'low'},), ({'level': 'high'},)]
+
+    def test_dictionary_inside_struct_multi_batch(self, connection):
+        dictionary = pa.array(["low", "high"])
+        batch1 = pa.record_batch(
+            [
+                pa.StructArray.from_arrays(
+                    [pa.DictionaryArray.from_arrays(pa.array([0, 1]), dictionary)],
+                    names=["level"],
+                )
+            ],
+            names=["info"],
+        )
+        batch2 = pa.record_batch(
+            [
+                pa.StructArray.from_arrays(
+                    [pa.DictionaryArray.from_arrays(pa.array([1, 0]), dictionary)],
+                    names=["level"],
+                )
+            ],
+            names=["info"],
+        )
+
+        sink = pa.BufferOutputStream()
+        with pa.ipc.new_stream(sink, batch1.schema) as writer:
+            writer.write_batch(batch1)
+            writer.write_batch(batch2)
+
+        with pa.BufferReader(sink.getvalue()) as buf_reader:
+            msg_reader = ipc.MessageReader.open_stream(buf_reader)
+            assert connection.from_arrow(msg_reader).fetchall() == [
+                ({'level': 'low'},),
+                ({'level': 'high'},),
+                ({'level': 'high'},),
+                ({'level': 'low'},),
+            ]
 
     def test_dictionary_numeric_values(self, connection):
         indices = pa.array([0, 1, 0, None, 1], type=pa.int8())
