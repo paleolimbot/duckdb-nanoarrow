@@ -10,6 +10,16 @@ fetchcontent_declare(nanoarrow
                      URL "https://github.com/apache/arrow-nanoarrow/archive/9fad80292360d0f3978264c11ba865ccc94020d8.zip"
                      URL_HASH SHA256=7dae6a078981463c7cbf9d430c27056812cdac0963e368f3f1ea6736c5f8280f
 )
+# nanoarrow builds its own LZ4 decompressor but must be told where liblz4 lives
+# In CI the library comes from vcpkg (see vcpkg.json), otherwise a system copy is found
+# The extension links liblz4 transitively through nanoarrow_ipc (needs CMake 3.24 or newer)
+find_path(LZ4_INCLUDE_DIR lz4frame.h REQUIRED)
+find_library(LZ4_LIBRARY NAMES lz4 liblz4 REQUIRED)
+get_filename_component(LZ4_LIBRARY_DIR "${LZ4_LIBRARY}" DIRECTORY)
+set(NANOARROW_IPC_WITH_LZ4 ON)
+set(LZ4_INCLUDE_DIRS "${LZ4_INCLUDE_DIR}")
+set(LZ4_LIBRARY_DIRS "${LZ4_LIBRARY_DIR}")
+set(LZ4_LIBRARIES "${LZ4_LIBRARY}")
 fetchcontent_makeavailable(nanoarrow)
 
 set(EXTENSION_NAME ${TARGET_NAME}_extension)
@@ -22,6 +32,7 @@ set(EXTENSION_SOURCES
     src/file_scanner/arrow_file_scan.cpp
     src/file_scanner/arrow_multi_file_info.cpp
     src/ipc/array_stream.cpp
+    src/ipc/codecs.cpp
     src/ipc/stream_factory.cpp
     src/ipc/stream_reader/base_stream_reader.cpp
     src/ipc/stream_reader/ipc_file_stream_reader.cpp

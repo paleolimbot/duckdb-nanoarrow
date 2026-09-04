@@ -1,53 +1,9 @@
 #include "ipc/stream_reader/base_stream_reader.hpp"
 #include <cinttypes>
 #include <iostream>
-#include "zstd.h"
 
 namespace duckdb {
 namespace ext_nanoarrow {
-
-// A version of ArrowDecompressZstd that uses DuckDB's C++ name-specified
-// zstd.h header that doesn't work with a C compiler
-static ArrowErrorCode DuckDBDecompressZstd(struct ArrowBufferView src, uint8_t* dst,
-                                           int64_t dst_size, struct ArrowError* error) {
-  size_t code = duckdb_zstd::ZSTD_decompress((void*)dst, (size_t)dst_size, src.data.data,
-                                             src.size_bytes);
-  if (duckdb_zstd::ZSTD_isError(code)) {
-    ArrowErrorSet(error,
-                  "ZSTD_decompress([buffer with %" PRId64
-                  " bytes] -> [buffer with %" PRId64 " bytes]) failed with error '%s'",
-                  src.size_bytes, dst_size, duckdb_zstd::ZSTD_getErrorName(code));
-    return EIO;
-  }
-
-  if (dst_size != static_cast<int64_t>(code)) {
-    ArrowErrorSet(error,
-                  "Expected decompressed size of %" PRId64 " bytes but got %" PRId64
-                  " bytes",
-                  dst_size, static_cast<int64_t>(code));
-    return EIO;
-  }
-
-  return NANOARROW_OK;
-}
-
-// Create an ArrowIpcDecoder() with the appropriate decompressor set.
-// We could also define a decompressor that uses threads to parellelize
-// decompression for batches with many columns.
-nanoarrow::ipc::UniqueDecoder IPCStreamReader::NewDuckDBArrowDecoder() {
-  nanoarrow::ipc::UniqueDecompressor decompressor;
-  NANOARROW_THROW_NOT_OK(ArrowIpcSerialDecompressor(decompressor.get()));
-  NANOARROW_THROW_NOT_OK(ArrowIpcSerialDecompressorSetFunction(
-      decompressor.get(), NANOARROW_IPC_COMPRESSION_TYPE_ZSTD, DuckDBDecompressZstd));
-
-  nanoarrow::ipc::UniqueDecoder decoder;
-  NANOARROW_THROW_NOT_OK(ArrowIpcDecoderInit(decoder.get()));
-  NANOARROW_THROW_NOT_OK(
-      ArrowIpcDecoderSetDecompressor(decoder.get(), decompressor.get()));
-  // Bug in nanoarrow!
-  decompressor->release = nullptr;
-  return decoder;
-}
 
 const ArrowSchema* IPCStreamReader::GetBaseSchema() {
   if (base_schema->release) {

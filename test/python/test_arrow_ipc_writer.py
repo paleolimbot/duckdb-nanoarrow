@@ -110,3 +110,20 @@ class TestArrowIPCBufferWriter(object):
 
         result_table = pa.Table.from_batches(batches, schema=stream_reader.schema)
         assert result_table.column("priority").to_pylist() == ["low", "high", "high", "low"]
+
+
+class TestArrowIPCCompression(object):
+    @pytest.mark.parametrize("compression", ["zstd", "lz4"])
+    def test_pyarrow_writes_duckdb_reads(self, connection, compression, tmp_path):
+        arrow_table = pa.table(
+            {
+                'f0': pa.array([1, 2, 3, 4], pa.int32()),
+                'f1': ['foo', 'bar', 'baz', None],
+                'f2': [True, None, False, True],
+            }
+        )
+        path = str(tmp_path / f"pyarrow_{compression}.arrows")
+        options = ipc.IpcWriteOptions(compression=compression)
+        with pa.OSFile(path, 'wb') as sink, ipc.new_stream(sink, arrow_table.schema, options=options) as writer:
+            writer.write_table(arrow_table)
+        tables_match(connection.execute(f"FROM read_arrow('{path}')").fetchall())
