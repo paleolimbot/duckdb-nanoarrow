@@ -163,7 +163,7 @@ class TestArrowIPCBufferRead(object):
             msg_reader = ipc.MessageReader.open_stream(buf_reader)
             assert connection.from_arrow(msg_reader).fetchall() == [("red", "blue"), ("green", "red")]
 
-    @pytest.mark.skip(reason="Nested dictionaries trigger a DuckDB Arrow conversion ownership error")
+    @pytest.mark.skip(reason="Nested dictionary IPC ownership is not propagated correctly (issue #56)")
     def test_dictionary_inside_struct(self, connection):
         # Nested dictionary inside a Struct
         dictionary = pa.array(["low", "high"])
