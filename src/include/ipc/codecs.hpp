@@ -13,8 +13,8 @@
 namespace duckdb {
 namespace ext_nanoarrow {
 
-//! Creates an IPC decoder that can decompress zstd compressed RecordBatch bodies
-//! (using DuckDB's bundled zstd)
+//! Creates an IPC decoder that can decompress zstd (using DuckDB's bundled zstd) and
+//! lz4 (using the lz4 library) compressed RecordBatch bodies
 nanoarrow::ipc::UniqueDecoder NewDuckDBArrowDecoder();
 
 }  // namespace ext_nanoarrow
