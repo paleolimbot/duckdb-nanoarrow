@@ -18,6 +18,17 @@ set(LOADABLE_EXTENSION_NAME ${TARGET_NAME}_loadable_extension)
 project(${TARGET_NAME})
 include_directories(src/include)
 
+# LZ4 (frame format) is needed to read and write LZ4-compressed IPC bodies. It is
+# provided by vcpkg (see vcpkg.json). For local builds without vcpkg, fall back to
+# pkg-config (e.g. a Homebrew or distro liblz4).
+find_package(lz4 CONFIG QUIET)
+if(NOT TARGET lz4::lz4)
+  find_package(PkgConfig REQUIRED)
+  pkg_check_modules(LZ4 REQUIRED IMPORTED_TARGET liblz4)
+  add_library(lz4::lz4 INTERFACE IMPORTED)
+  target_link_libraries(lz4::lz4 INTERFACE PkgConfig::LZ4)
+endif()
+
 set(EXTENSION_SOURCES
     src/file_scanner/arrow_file_scan.cpp
     src/file_scanner/arrow_multi_file_info.cpp
@@ -38,10 +49,11 @@ set(EXTENSION_SOURCES
 build_static_extension(${TARGET_NAME} ${EXTENSION_SOURCES})
 build_loadable_extension(${TARGET_NAME} " " ${EXTENSION_SOURCES})
 
-# Link nanoarrow in both the static library as the loadable extension
-target_link_libraries(${EXTENSION_NAME} nanoarrow::nanoarrow nanoarrow::nanoarrow_ipc)
+# Link nanoarrow and lz4 in both the static library as the loadable extension
+target_link_libraries(${EXTENSION_NAME} nanoarrow::nanoarrow nanoarrow::nanoarrow_ipc
+                      lz4::lz4)
 target_link_libraries(${LOADABLE_EXTENSION_NAME} nanoarrow::nanoarrow
-                      nanoarrow::nanoarrow_ipc)
+                      nanoarrow::nanoarrow_ipc lz4::lz4)
 
 install(TARGETS ${EXTENSION_NAME}
         EXPORT "${DUCKDB_EXPORT_SET}"
