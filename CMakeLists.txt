@@ -10,11 +10,9 @@ fetchcontent_declare(nanoarrow
                      URL "https://github.com/apache/arrow-nanoarrow/archive/9fad80292360d0f3978264c11ba865ccc94020d8.zip"
                      URL_HASH SHA256=7dae6a078981463c7cbf9d430c27056812cdac0963e368f3f1ea6736c5f8280f
 )
-# Build nanoarrow's own LZ4 decompressor. nanoarrow does not bundle liblz4 and
-# locates it via pkg-config unless told where it is, so resolve the vcpkg (see
-# vcpkg.json) or system copy here and hand it over. nanoarrow wraps it in its own
-# lz4::lz4 target, which the extension picks up transitively through
-# nanoarrow_ipc (CMake >= 3.24 resolves the target across directory scopes).
+# nanoarrow builds its own LZ4 decompressor but must be told where liblz4 lives
+# In CI the library comes from vcpkg (see vcpkg.json), otherwise a system copy is found
+# The extension links liblz4 transitively through nanoarrow_ipc (needs CMake 3.24 or newer)
 find_path(LZ4_INCLUDE_DIR lz4frame.h REQUIRED)
 find_library(LZ4_LIBRARY NAMES lz4 liblz4 REQUIRED)
 get_filename_component(LZ4_LIBRARY_DIR "${LZ4_LIBRARY}" DIRECTORY)

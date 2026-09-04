@@ -11,16 +11,7 @@ namespace ext_nanoarrow {
 
 namespace {
 
-//===----------------------------------------------------------------------===//
-// Decompression
-//
-// nanoarrow's own zstd/lz4 support is compiled in only when nanoarrow is built
-// against those libraries. LZ4 is provided that way (see NANOARROW_IPC_WITH_LZ4
-// in CMakeLists.txt). For zstd we plug our own function into nanoarrow's serial
-// decompressor instead: DuckDB already bundles zstd, but its header lives in a
-// C++ namespace and can't be used from nanoarrow's C sources.
-//===----------------------------------------------------------------------===//
-
+// Uses DuckDB's bundled zstd, whose C++ header cannot be used from nanoarrow's C sources
 ArrowErrorCode DuckDBDecompressZstd(struct ArrowBufferView src, uint8_t* dst,
                                     int64_t dst_size, struct ArrowError* error) {
   size_t code = duckdb_zstd::ZSTD_decompress((void*)dst, (size_t)dst_size, src.data.data,
@@ -47,14 +38,12 @@ ArrowErrorCode DuckDBDecompressZstd(struct ArrowBufferView src, uint8_t* dst,
 }  // namespace
 
 nanoarrow::ipc::UniqueDecoder NewDuckDBArrowDecoder() {
-  // We could also define a decompressor that uses threads to parallelize
-  // decompression for batches with many columns.
+  // A threaded decompressor could parallelize batches with many columns
   nanoarrow::ipc::UniqueDecompressor decompressor;
   NANOARROW_THROW_NOT_OK(ArrowIpcSerialDecompressor(decompressor.get()));
   NANOARROW_THROW_NOT_OK(ArrowIpcSerialDecompressorSetFunction(
       decompressor.get(), NANOARROW_IPC_COMPRESSION_TYPE_ZSTD, DuckDBDecompressZstd));
-  // LZ4 is handled by nanoarrow's built-in decompressor, which the serial
-  // decompressor registers by default
+  // nanoarrow's own LZ4 function is registered by the serial decompressor by default
   if (ArrowIpcGetLZ4DecompressionFunction() == nullptr) {
     throw InternalException("nanoarrow was built without LZ4 support");
   }
