@@ -84,6 +84,8 @@ Similar to the copy function, the extension also registers `.arrows` and `.arrow
 FROM 'test.arrows';
 ```
 
+Files and streams whose record batch bodies are compressed with `zstd` or `lz4` (the two codecs allowed by the Arrow IPC format) are read transparently.
+
 Besides single-file reading, our extension also fully supports multi-file reading, including all valid multi-file options.
 
 If we were to create a second test file using:
