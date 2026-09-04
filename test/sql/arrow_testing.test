@@ -21,6 +21,12 @@ statement ok
 FROM check_arrow_testing_file('1.0.0-littleendian/generated_datetime')
 
 statement ok
+FROM check_arrow_testing_file('1.0.0-littleendian/generated_dictionary')
+
+statement ok
+FROM check_arrow_testing_file('1.0.0-littleendian/generated_dictionary_unsigned')
+
+statement ok
 FROM check_arrow_testing_file('1.0.0-littleendian/generated_decimal')
 
 # This test will fail,because the struct created in this arrow file does not have names on their children

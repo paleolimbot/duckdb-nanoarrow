@@ -31,9 +31,9 @@ little_big_integration_files = [
     "generated_primitive_zerolength.stream",
     "generated_primitive.stream",
     "generated_recursive_nested.stream",
-    # TODO: Uncomment this after adding support for dictionaries
-    # "generated_dictionary.stream",
-    # "generated_dictionary_unsigned.stream",
+    "generated_dictionary.stream",
+    "generated_dictionary_unsigned.stream",
+    # Nested dictionaries currently trigger a DuckDB Arrow conversion ownership error.
     # "generated_nested_dictionary.stream",
 ]
 

@@ -84,6 +84,7 @@ class IPCStreamReader {
 
   ArrowError error{};
   nanoarrow::ipc::UniqueDecoder decoder{};
+  nanoarrow::ipc::UniqueDictionaries dictionaries{};
   vector<int64_t> projected_fields;
   nanoarrow::UniqueSchema projected_schema;
   //! Schema without projection applied to it
