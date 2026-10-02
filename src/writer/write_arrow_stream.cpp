@@ -31,6 +31,7 @@ struct ArrowWriteBindData : public TableFunctionData {
   bool file_format = true;
   bool size_metadata = false;
   idx_t row_group_size = 122880;
+  string type_metadata_namespace;
 };
 
 struct ArrowWriteGlobalState : public GlobalFunctionData {
@@ -127,9 +128,44 @@ unique_ptr<FunctionData> ArrowWriteBind(ClientContext& context,
           ReadMetadataPairs(option.second[0], "kv_metadata argument");
     } else if (loption == "field_metadata") {
       bind_data->field_metadata = ReadFieldMetadata(option.second[0], names);
+    } else if (loption == "type_metadata_namespace") {
+      if (option.second[0].IsNull()) {
+        throw BinderException("TYPE_METADATA_NAMESPACE must not be NULL");
+      }
+      bind_data->type_metadata_namespace = option.second[0].ToString();
+      if (bind_data->type_metadata_namespace.empty()) {
+        throw BinderException("TYPE_METADATA_NAMESPACE must not be empty");
+      }
+      // The Arrow format reserves the ARROW namespace of custom_metadata keys
+      const auto& type_metadata_namespace = bind_data->type_metadata_namespace;
+      if (type_metadata_namespace == "ARROW" ||
+          StringUtil::StartsWith(type_metadata_namespace, "ARROW:")) {
+        throw BinderException(
+            "TYPE_METADATA_NAMESPACE \"%s\" is in the ARROW namespace, which the Arrow "
+            "format reserves",
+            type_metadata_namespace);
+      }
     }
   }
   bind_data->compression.Validate();
+  if (!bind_data->type_metadata_namespace.empty()) {
+    const auto& type_metadata_namespace = bind_data->type_metadata_namespace;
+    for (const auto& field : bind_data->field_metadata) {
+      for (const auto& item : field.metadata) {
+        if (ArrowStreamWriter::IsTypeMetadataKey(item.first, type_metadata_namespace)) {
+          throw BinderException(
+              "FIELD_METADATA key \"%s\" is reserved by TYPE_METADATA_NAMESPACE",
+              item.first);
+        }
+      }
+    }
+    // DuckDB owns the metadata of the schema it exports, so copy into a nanoarrow owned
+    // schema before adding to it. Every output file copies this schema.
+    nanoarrow::UniqueSchema schema;
+    NANOARROW_THROW_NOT_OK(ArrowSchemaDeepCopy(bind_data->schema.get(), schema.get()));
+    ArrowStreamWriter::SetTypeMetadata(*schema.get(), sql_types, type_metadata_namespace);
+    bind_data->schema = std::move(schema);
+  }
 
   if (bind_data->size_metadata) {
     if (!bind_data->file_format) {
