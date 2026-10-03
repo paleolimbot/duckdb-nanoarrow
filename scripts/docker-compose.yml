@@ -1,22 +1,25 @@
 services:
+  # MinIO's container images are no longer publicly pullable, so SeaweedFS serves the same S3 API, as in
+  # duckdb-httpfs. The service keeps its name so scripts/start-minio.sh and test/configs/minio.json are unchanged.
   minio:
-    image: quay.io/minio/minio
-    environment:
-      - MINIO_ROOT_USER=admin
-      - MINIO_ROOT_PASSWORD=password
+    image: docker.io/chrislusf/seaweedfs:4.47
     ports:
       - "9000:9000"
-    command: ["server", "/data"]
+    volumes:
+      - ./seaweedfs_s3_config.json:/etc/seaweedfs/s3_config.json:ro
+    command: >
+      server -dir=/data -ip.bind=0.0.0.0 -master.volumeSizeLimitMB=1024
+      -s3 -s3.port=9000 -s3.config=/etc/seaweedfs/s3_config.json
 
-  # Creates the test bucket once MinIO answers, then exits
+  # Creates the test bucket once the server answers, then exits. The MinIO client is only a generic S3 client here.
   mc:
     depends_on:
       - minio
-    image: quay.io/minio/mc
+    image: docker.io/bitnamilegacy/minio-client:2025.7.21-debian-12-r3
     entrypoint: |
       /bin/sh -c "
-      until /usr/bin/mc alias set local http://minio:9000 admin password; do
+      until /opt/bitnami/minio-client/bin/mc alias set local http://minio:9000 admin password; do
         sleep 1;
       done;
-      /usr/bin/mc mb --ignore-existing local/mybucket
+      /opt/bitnami/minio-client/bin/mc mb --ignore-existing local/mybucket
       "
