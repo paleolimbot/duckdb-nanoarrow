@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Starts a fresh MinIO with an empty mybucket for test/configs/minio.json
+# Starts a fresh S3 server (SeaweedFS) with an empty mybucket for test/configs/minio.json
 set -euxo pipefail
 
 cd "$(dirname "$0")"
