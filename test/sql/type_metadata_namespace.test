@@ -1,0 +1,270 @@
+# name: test/sql/type_metadata_namespace.test
+# description: COPY TO Arrow IPC describes DuckDB logical types via TYPE_METADATA_NAMESPACE
+# group: [sql]
+
+require nanoarrow
+
+test-env DATA_PATH {TEST_DIR}
+
+# <namespace>:type holds the type name without parameters and <namespace>:type_details
+# the full type as DESCRIBE spells it, on every field including nested list, struct and
+# map children. Decimals also carry <namespace>:type_precision and
+# <namespace>:type_scale. The map entries struct is not a DuckDB type and gets no keys.
+statement ok
+COPY (SELECT 42::HUGEINT AS h, 1.23::DECIMAL(10,2) AS d, [1, 2, 3]::INTEGER[] AS arr, {'a': 1, 'b': 'x'} AS s, MAP(['k'], [10]) AS m) TO '{DATA_PATH}/ns.arrow' (FORMAT ARROW, TYPE_METADATA_NAMESPACE 'VENDOR')
+
+query III
+SELECT field_path, key, value FROM arrow_kv_metadata('{DATA_PATH}/ns.arrow') ORDER BY field_path NULLS FIRST, key
+----
+[arr]	VENDOR:type	LIST
+[arr]	VENDOR:type_details	INTEGER[]
+[arr, l]	VENDOR:type	INTEGER
+[arr, l]	VENDOR:type_details	INTEGER
+[d]	VENDOR:type	DECIMAL
+[d]	VENDOR:type_details	DECIMAL(10,2)
+[d]	VENDOR:type_precision	10
+[d]	VENDOR:type_scale	2
+[h]	VENDOR:type	HUGEINT
+[h]	VENDOR:type_details	HUGEINT
+[m]	VENDOR:type	MAP
+[m]	VENDOR:type_details	MAP(VARCHAR, INTEGER)
+[m, entries, key]	VENDOR:type	VARCHAR
+[m, entries, key]	VENDOR:type_details	VARCHAR
+[m, entries, value]	VENDOR:type	INTEGER
+[m, entries, value]	VENDOR:type_details	INTEGER
+[s]	VENDOR:type	STRUCT
+[s]	VENDOR:type_details	STRUCT(a INTEGER, b VARCHAR)
+[s, a]	VENDOR:type	INTEGER
+[s, a]	VENDOR:type_details	INTEGER
+[s, b]	VENDOR:type	VARCHAR
+[s, b]	VENDOR:type_details	VARCHAR
+
+# A fixed-size array is an ARRAY, and its length is in the details. Its element is
+# exported without a name.
+statement ok
+COPY (SELECT [1, 2, 3]::INTEGER[3] AS fixed) TO '{DATA_PATH}/ns_fixed.arrow' (FORMAT ARROW, TYPE_METADATA_NAMESPACE 'VENDOR')
+
+query III
+SELECT field_path, key, value FROM arrow_kv_metadata('{DATA_PATH}/ns_fixed.arrow') ORDER BY field_path, key
+----
+[fixed]	VENDOR:type	ARRAY
+[fixed]	VENDOR:type_details	INTEGER[3]
+[fixed, '']	VENDOR:type	INTEGER
+[fixed, '']	VENDOR:type_details	INTEGER
+
+# Union members, unnamed struct fields and NULL columns are described as well
+statement ok
+COPY (SELECT union_value(num := 1)::UNION(num INTEGER, s VARCHAR) AS u, (1, 'x') AS t, NULL AS n) TO '{DATA_PATH}/ns_other_types.arrow' (FORMAT ARROW, TYPE_METADATA_NAMESPACE 'VENDOR')
+
+query III
+SELECT field_path, key, value FROM arrow_kv_metadata('{DATA_PATH}/ns_other_types.arrow') ORDER BY field_path, key
+----
+[n]	VENDOR:type	NULL
+[n]	VENDOR:type_details	\x22NULL\x22
+[t]	VENDOR:type	TUPLE
+[t]	VENDOR:type_details	TUPLE(INTEGER, VARCHAR)
+[t, element1]	VENDOR:type	INTEGER
+[t, element1]	VENDOR:type_details	INTEGER
+[t, element2]	VENDOR:type	VARCHAR
+[t, element2]	VENDOR:type_details	VARCHAR
+[u]	VENDOR:type	UNION
+[u]	VENDOR:type_details	UNION(num INTEGER, s VARCHAR)
+[u, num]	VENDOR:type	INTEGER
+[u, num]	VENDOR:type_details	INTEGER
+[u, s]	VENDOR:type	VARCHAR
+[u, s]	VENDOR:type_details	VARCHAR
+
+# A type without parameters is named as DESCRIBE spells it, spaces included
+statement ok
+COPY (SELECT '101'::BIT AS bt, '01:02:03+00'::TIMETZ AS tz) TO '{DATA_PATH}/ns_names.arrow' (FORMAT ARROW, TYPE_METADATA_NAMESPACE 'VENDOR')
+
+query III
+SELECT field_path, key, value FROM arrow_kv_metadata('{DATA_PATH}/ns_names.arrow') ORDER BY field_path, key
+----
+[bt]	VENDOR:type	BIT
+[bt]	VENDOR:type_details	BIT
+[tz]	VENDOR:type	TIME WITH TIME ZONE
+[tz]	VENDOR:type_details	TIME WITH TIME ZONE
+
+# A struct of a list of maps whose values are structs holding a list of decimals.
+# Every level is described, the map entries struct gets no keys, and only the
+# decimal at the bottom carries a precision and scale.
+statement ok
+COPY (SELECT {'orders': [MAP {'sku': {'qty': 2, 'prices': [1.5::DECIMAL(10,2)]}}]} AS c) TO '{DATA_PATH}/ns_orders.arrow' (FORMAT ARROW, TYPE_METADATA_NAMESPACE 'VENDOR')
+
+query III
+SELECT field_path, key, value FROM arrow_kv_metadata('{DATA_PATH}/ns_orders.arrow') ORDER BY field_path, key
+----
+[c]	VENDOR:type	STRUCT
+[c]	VENDOR:type_details	STRUCT(orders MAP(VARCHAR, STRUCT(qty INTEGER, prices DECIMAL(10,2)[]))[])
+[c, orders]	VENDOR:type	LIST
+[c, orders]	VENDOR:type_details	MAP(VARCHAR, STRUCT(qty INTEGER, prices DECIMAL(10,2)[]))[]
+[c, orders, l]	VENDOR:type	MAP
+[c, orders, l]	VENDOR:type_details	MAP(VARCHAR, STRUCT(qty INTEGER, prices DECIMAL(10,2)[]))
+[c, orders, l, entries, key]	VENDOR:type	VARCHAR
+[c, orders, l, entries, key]	VENDOR:type_details	VARCHAR
+[c, orders, l, entries, value]	VENDOR:type	STRUCT
+[c, orders, l, entries, value]	VENDOR:type_details	STRUCT(qty INTEGER, prices DECIMAL(10,2)[])
+[c, orders, l, entries, value, prices]	VENDOR:type	LIST
+[c, orders, l, entries, value, prices]	VENDOR:type_details	DECIMAL(10,2)[]
+[c, orders, l, entries, value, prices, l]	VENDOR:type	DECIMAL
+[c, orders, l, entries, value, prices, l]	VENDOR:type_details	DECIMAL(10,2)
+[c, orders, l, entries, value, prices, l]	VENDOR:type_precision	10
+[c, orders, l, entries, value, prices, l]	VENDOR:type_scale	2
+[c, orders, l, entries, value, qty]	VENDOR:type	INTEGER
+[c, orders, l, entries, value, qty]	VENDOR:type_details	INTEGER
+
+# A map with a struct key and a list of fixed-size arrays as its value
+statement ok
+COPY (SELECT MAP([{'id': 1}], [[[1, 2]::INTEGER[2]]]) AS c) TO '{DATA_PATH}/ns_map_keys.arrow' (FORMAT ARROW, TYPE_METADATA_NAMESPACE 'VENDOR')
+
+query III
+SELECT field_path, key, value FROM arrow_kv_metadata('{DATA_PATH}/ns_map_keys.arrow') ORDER BY field_path, key
+----
+[c]	VENDOR:type	MAP
+[c]	VENDOR:type_details	MAP(STRUCT(id INTEGER), INTEGER[2][])
+[c, entries, key]	VENDOR:type	STRUCT
+[c, entries, key]	VENDOR:type_details	STRUCT(id INTEGER)
+[c, entries, key, id]	VENDOR:type	INTEGER
+[c, entries, key, id]	VENDOR:type_details	INTEGER
+[c, entries, value]	VENDOR:type	LIST
+[c, entries, value]	VENDOR:type_details	INTEGER[2][]
+[c, entries, value, l]	VENDOR:type	ARRAY
+[c, entries, value, l]	VENDOR:type_details	INTEGER[2]
+[c, entries, value, l, '']	VENDOR:type	INTEGER
+[c, entries, value, l, '']	VENDOR:type_details	INTEGER
+
+# A union whose members are nested types. The tag is not an Arrow child and gets
+# no keys.
+statement ok
+COPY (SELECT union_value(a := {'x': 1.5::DECIMAL(4,1)})::UNION(a STRUCT(x DECIMAL(4,1)), b TIMESTAMPTZ[]) AS c) TO '{DATA_PATH}/ns_union.arrow' (FORMAT ARROW, TYPE_METADATA_NAMESPACE 'VENDOR')
+
+query III
+SELECT field_path, key, value FROM arrow_kv_metadata('{DATA_PATH}/ns_union.arrow') ORDER BY field_path, key
+----
+[c]	VENDOR:type	UNION
+[c]	VENDOR:type_details	UNION(a STRUCT(x DECIMAL(4,1)), b TIMESTAMP WITH TIME ZONE[])
+[c, a]	VENDOR:type	STRUCT
+[c, a]	VENDOR:type_details	STRUCT(x DECIMAL(4,1))
+[c, a, x]	VENDOR:type	DECIMAL
+[c, a, x]	VENDOR:type_details	DECIMAL(4,1)
+[c, a, x]	VENDOR:type_precision	4
+[c, a, x]	VENDOR:type_scale	1
+[c, b]	VENDOR:type	LIST
+[c, b]	VENDOR:type_details	TIMESTAMP WITH TIME ZONE[]
+[c, b, l]	VENDOR:type	TIMESTAMP WITH TIME ZONE
+[c, b, l]	VENDOR:type_details	TIMESTAMP WITH TIME ZONE
+
+# Struct field names that need quoting, a space or a keyword, stay quoted in the
+# details, and a nested tuple is a TUPLE
+statement ok
+COPY (SELECT {'My Col': {'when': TIMESTAMPTZ '2020-01-01 00:00:00+00', 'pair': (1, 'x')}} AS c) TO '{DATA_PATH}/ns_quoted.arrow' (FORMAT ARROW, TYPE_METADATA_NAMESPACE 'VENDOR')
+
+query III
+SELECT field_path, key, value FROM arrow_kv_metadata('{DATA_PATH}/ns_quoted.arrow') ORDER BY field_path, key
+----
+[c]	VENDOR:type	STRUCT
+[c]	VENDOR:type_details	STRUCT(\x22My Col\x22 STRUCT(\x22when\x22 TIMESTAMP WITH TIME ZONE, pair TUPLE(INTEGER, VARCHAR)))
+[c, My Col]	VENDOR:type	STRUCT
+[c, My Col]	VENDOR:type_details	STRUCT(\x22when\x22 TIMESTAMP WITH TIME ZONE, pair TUPLE(INTEGER, VARCHAR))
+[c, My Col, pair]	VENDOR:type	TUPLE
+[c, My Col, pair]	VENDOR:type_details	TUPLE(INTEGER, VARCHAR)
+[c, My Col, pair, element1]	VENDOR:type	INTEGER
+[c, My Col, pair, element1]	VENDOR:type_details	INTEGER
+[c, My Col, pair, element2]	VENDOR:type	VARCHAR
+[c, My Col, pair, element2]	VENDOR:type_details	VARCHAR
+[c, My Col, when]	VENDOR:type	TIMESTAMP WITH TIME ZONE
+[c, My Col, when]	VENDOR:type_details	TIMESTAMP WITH TIME ZONE
+
+# The namespace is caller supplied, so the key is spelled however it is passed
+statement ok
+COPY (SELECT 42::HUGEINT AS h) TO '{DATA_PATH}/ns_other.arrow' (FORMAT ARROW, TYPE_METADATA_NAMESPACE 'DUCKDB')
+
+query III
+SELECT field_path, key, value FROM arrow_kv_metadata('{DATA_PATH}/ns_other.arrow') ORDER BY field_path, key
+----
+[h]	DUCKDB:type	HUGEINT
+[h]	DUCKDB:type_details	HUGEINT
+
+# Without the option no type metadata is written
+statement ok
+COPY (SELECT 42::HUGEINT AS h) TO '{DATA_PATH}/ns_none.arrow' (FORMAT ARROW)
+
+query I
+SELECT count(*) FROM arrow_kv_metadata('{DATA_PATH}/ns_none.arrow')
+----
+0
+
+# The added keys are merged with, not clobbering, the metadata DuckDB already
+# attaches to a field such as its extension type
+statement ok
+SET arrow_lossless_conversion = true
+
+statement ok
+COPY (SELECT gen_random_uuid() AS uid) TO '{DATA_PATH}/ns_ext.arrows' (FORMAT ARROWS, TYPE_METADATA_NAMESPACE 'VENDOR')
+
+query III
+SELECT field_path, key, value FROM arrow_kv_metadata('{DATA_PATH}/ns_ext.arrows') WHERE key IN ('ARROW:extension:name', 'VENDOR:type', 'VENDOR:type_details') ORDER BY field_path, key
+----
+[uid]	ARROW:extension:name	arrow.uuid
+[uid]	VENDOR:type	UUID
+[uid]	VENDOR:type_details	UUID
+
+# FIELD_METADATA keys outside the namespace are merged with the type keys
+statement ok
+COPY (SELECT 42 AS h) TO '{DATA_PATH}/ns_field_metadata.arrow' (FORMAT ARROW, FIELD_METADATA {'h': {'unit': 'count', 'OTHER:type': 'mine'}}, TYPE_METADATA_NAMESPACE 'VENDOR')
+
+query III
+SELECT field_path, key, value FROM arrow_kv_metadata('{DATA_PATH}/ns_field_metadata.arrow') ORDER BY field_path, key
+----
+[h]	OTHER:type	mine
+[h]	VENDOR:type	INTEGER
+[h]	VENDOR:type_details	INTEGER
+[h]	unit	count
+
+# Every key the namespace could write is reserved, in either option order
+statement error
+COPY (SELECT 1 AS i) TO '{DATA_PATH}/error.arrow' (FORMAT ARROW, FIELD_METADATA {'i': {'VENDOR:type': 'mine'}}, TYPE_METADATA_NAMESPACE 'VENDOR')
+----
+FIELD_METADATA key "VENDOR:type" is reserved by TYPE_METADATA_NAMESPACE
+
+statement error
+COPY (SELECT 1 AS i) TO '{DATA_PATH}/error.arrow' (FORMAT ARROW, TYPE_METADATA_NAMESPACE 'VENDOR', FIELD_METADATA {'i': {'VENDOR:type_scale': '2'}})
+----
+FIELD_METADATA key "VENDOR:type_scale" is reserved by TYPE_METADATA_NAMESPACE
+
+statement error
+COPY (SELECT 1 AS i) TO '{DATA_PATH}/error.arrow' (FORMAT ARROW, TYPE_METADATA_NAMESPACE NULL)
+----
+TYPE_METADATA_NAMESPACE must not be NULL
+
+statement error
+COPY (SELECT 1 AS i) TO '{DATA_PATH}/error.arrow' (FORMAT ARROW, TYPE_METADATA_NAMESPACE '')
+----
+TYPE_METADATA_NAMESPACE must not be empty
+
+# The Arrow format reserves the ARROW namespace, nested namespaces under it included
+statement error
+COPY (SELECT 1 AS i) TO '{DATA_PATH}/error.arrow' (FORMAT ARROW, TYPE_METADATA_NAMESPACE 'ARROW')
+----
+TYPE_METADATA_NAMESPACE "ARROW" is in the ARROW namespace, which the Arrow format reserves
+
+statement error
+COPY (SELECT 1 AS i) TO '{DATA_PATH}/error.arrow' (FORMAT ARROW, TYPE_METADATA_NAMESPACE 'ARROW:duckdb')
+----
+TYPE_METADATA_NAMESPACE "ARROW:duckdb" is in the ARROW namespace, which the Arrow format reserves
+
+# Keys are case-sensitive, so only the exact ARROW namespace is reserved
+statement ok
+COPY (SELECT 1 AS i) TO '{DATA_PATH}/ns_lower_arrow.arrow' (FORMAT ARROW, TYPE_METADATA_NAMESPACE 'arrow')
+
+query III
+SELECT field_path, key, value FROM arrow_kv_metadata('{DATA_PATH}/ns_lower_arrow.arrow') ORDER BY field_path, key
+----
+[i]	arrow:type	INTEGER
+[i]	arrow:type_details	INTEGER
+
+statement error
+COPY (SELECT 1 AS i) TO '{DATA_PATH}/error.arrow' (FORMAT ARROW, TYPE_METADATA_NAMESPACE ('A', 'B'))
+----
+TYPE_METADATA_NAMESPACE requires exactly one argument

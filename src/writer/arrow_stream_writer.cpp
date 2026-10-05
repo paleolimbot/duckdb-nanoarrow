@@ -3,6 +3,7 @@
 #include "duckdb/common/bswap.hpp"
 #include "duckdb/common/limits.hpp"
 #include "duckdb/common/numeric_utils.hpp"
+#include "duckdb/common/types.hpp"
 #include "ipc/file_format.hpp"
 
 namespace duckdb {
@@ -13,6 +14,10 @@ namespace {
 
 constexpr char kTotalCompressedSize[] = "total_compressed_size";
 constexpr char kTotalUncompressedSize[] = "total_uncompressed_size";
+constexpr char kTypeKey[] = ":type";
+constexpr char kTypeDetailsKey[] = ":type_details";
+constexpr char kTypePrecisionKey[] = ":type_precision";
+constexpr char kTypeScaleKey[] = ":type_scale";
 
 void SetSchemaMetadata(ArrowSchema* schema,
                        const vector<pair<string, string>>& metadata) {
@@ -25,6 +30,77 @@ void SetSchemaMetadata(ArrowSchema* schema,
   }
   NANOARROW_THROW_NOT_OK(
       ArrowSchemaSetMetadata(schema, reinterpret_cast<char*>(packed->data)));
+}
+
+// The <namespace>:type value: DuckDB's name for the type without its parameters, or
+// its alias such as JSON
+string GetTypeName(const LogicalType& type) {
+  return type.HasAlias() ? type.GetAlias() : LogicalTypeIdToString(type.id());
+}
+
+// The child types in the order Arrow lays out the children of the field
+vector<LogicalType> GetTypeChildren(const LogicalType& type) {
+  vector<LogicalType> children;
+  switch (type.id()) {
+    case LogicalTypeId::LIST:
+      children.push_back(ListType::GetChildType(type));
+      break;
+    case LogicalTypeId::ARRAY:
+      children.push_back(ArrayType::GetChildType(type));
+      break;
+    case LogicalTypeId::STRUCT:
+    case LogicalTypeId::TUPLE:
+      for (const auto& child : StructType::GetChildTypes(type)) {
+        children.push_back(child.second);
+      }
+      break;
+    case LogicalTypeId::MAP:
+      children.push_back(MapType::KeyType(type));
+      children.push_back(MapType::ValueType(type));
+      break;
+    case LogicalTypeId::UNION:
+      for (idx_t member_index = 0; member_index < UnionType::GetMemberCount(type);
+           member_index++) {
+        children.push_back(UnionType::GetMemberType(type, member_index));
+      }
+      break;
+    default:
+      break;
+  }
+  return children;
+}
+
+// Adds <namespace>:type and <namespace>:type_details to the field, and recurses so
+// every nested list, array, struct, map and union child is described as well
+void AddTypeMetadata(ArrowSchema* schema, const LogicalType& type,
+                     const string& type_metadata_namespace) {
+  vector<pair<string, string>> metadata;
+  metadata.emplace_back(type_metadata_namespace + kTypeKey, GetTypeName(type));
+  metadata.emplace_back(type_metadata_namespace + kTypeDetailsKey, type.ToString());
+  if (type.id() == LogicalTypeId::DECIMAL) {
+    uint8_t width, scale;
+    type.GetDecimalProperties(width, scale);
+    metadata.emplace_back(type_metadata_namespace + kTypePrecisionKey, to_string(width));
+    metadata.emplace_back(type_metadata_namespace + kTypeScaleKey, to_string(scale));
+  }
+  SetSchemaMetadata(schema, metadata);
+  // Arrow keeps map keys and values under an entries struct, which has no DuckDB type
+  ArrowSchema* parent = schema;
+  if (type.id() == LogicalTypeId::MAP) {
+    if (schema->n_children != 1) {
+      throw InternalException("Arrow map for %s has no entries struct", type.ToString());
+    }
+    parent = schema->children[0];
+  }
+  const auto children = GetTypeChildren(type);
+  if (static_cast<idx_t>(parent->n_children) != children.size()) {
+    throw InternalException("Arrow children do not match the children of %s",
+                            type.ToString());
+  }
+  for (idx_t child_index = 0; child_index < children.size(); child_index++) {
+    AddTypeMetadata(parent->children[child_index], children[child_index],
+                    type_metadata_namespace);
+  }
 }
 
 }  // namespace
@@ -188,6 +264,29 @@ void ArrowStreamWriter::WriteFooter() {
   WriteBytes(footer->data, footer->size_bytes);
   WriteBytes(const_data_ptr_cast(&footer_size), sizeof(footer_size));
   WriteBytes(const_data_ptr_cast(kArrowIPCFileMagic), kArrowIPCFileMagicSize);
+}
+
+void ArrowStreamWriter::SetTypeMetadata(ArrowSchema& schema,
+                                        const vector<LogicalType>& types,
+                                        const string& type_metadata_namespace) {
+  if (static_cast<idx_t>(schema.n_children) != types.size()) {
+    throw InternalException("Arrow schema does not match the written columns");
+  }
+  for (idx_t column_index = 0; column_index < types.size(); column_index++) {
+    AddTypeMetadata(schema.children[column_index], types[column_index],
+                    type_metadata_namespace);
+  }
+}
+
+bool ArrowStreamWriter::IsTypeMetadataKey(const string& key,
+                                          const string& type_metadata_namespace) {
+  for (const auto suffix :
+       {kTypeKey, kTypeDetailsKey, kTypePrecisionKey, kTypeScaleKey}) {
+    if (key == type_metadata_namespace + suffix) {
+      return true;
+    }
+  }
+  return false;
 }
 
 bool ArrowStreamWriter::IsSizeMetadataKey(const string& key) {

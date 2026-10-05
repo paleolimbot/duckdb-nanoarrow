@@ -51,6 +51,12 @@ struct ArrowStreamWriter {
 
   static bool IsSizeMetadataKey(const string& key);
 
+  //! Describes the type of every field, nested children included, under the
+  //! <type_metadata_namespace>:type keys
+  static void SetTypeMetadata(ArrowSchema& schema, const vector<LogicalType>& types,
+                              const string& type_metadata_namespace);
+  static bool IsTypeMetadataKey(const string& key, const string& type_metadata_namespace);
+
  private:
   void WriteFooter();
   //! Appends to whichever writer the output uses
