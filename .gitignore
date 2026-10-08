@@ -10,3 +10,4 @@ test/python/__pycache__/
 .cache
 duckdb-python
 duckdb_benchmark_data/
+test/java/target/

@@ -211,6 +211,13 @@ void ArrowWriteFinalize(ClientContext& context, FunctionData& bind_data,
   global_state.writer->Finalize();
 }
 
+void ArrowWriteGetWrittenStatistics(ClientContext& context, FunctionData& bind_data,
+                                    GlobalFunctionData& gstate,
+                                    CopyFunctionFileStatistics& statistics) {
+  auto& global_state = gstate.Cast<ArrowWriteGlobalState>();
+  global_state.writer->SetWrittenStatistics(statistics);
+}
+
 // Batch copies still ask for a local state, which prepare_batch and flush_batch never use
 unique_ptr<LocalFunctionData> ArrowWriteInitializeLocal(ExecutionContext& context,
                                                         FunctionData& bind_data_p) {
@@ -275,6 +282,7 @@ void RegisterArrowStreamCopyFunction(ExtensionLoader& loader) {
   function.copy_to_initialize_global = ArrowWriteInitializeGlobal;
   function.copy_to_initialize_local = ArrowWriteInitializeLocal;
   function.copy_to_finalize = ArrowWriteFinalize;
+  function.copy_to_get_written_statistics = ArrowWriteGetWrittenStatistics;
   function.execution_mode = ArrowWriteExecutionMode;
   function.copy_from_bind = MultiFileFunction<ArrowMultiFileInfo>::MultiFileBindCopy;
   function.copy_from_function = ReadArrowStreamFunction();

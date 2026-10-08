@@ -1,0 +1,50 @@
+# name: test/sql/return_stats.test
+# description: COPY TO Arrow IPC reports per file statistics with RETURN_STATS
+# group: [sql]
+
+require nanoarrow
+
+test-env DATA_PATH {TEST_DIR}
+
+# One row per written file. The file and footer sizes are those of the file on disk,
+# and extra_info holds the record batch statistics.
+statement ok
+CREATE TABLE file_stats AS WITH s AS (COPY (SELECT i AS id FROM range(5000) t(i)) TO '{DATA_PATH}/stats.arrow' (FORMAT ARROW, CHUNK_SIZE 2048, RETURN_STATS)) SELECT * FROM s
+
+query IIIII
+SELECT count, file_size_bytes = (SELECT size FROM read_blob('{DATA_PATH}/stats.arrow')), footer_size_bytes, extra_info['record_batch_count']::UBIGINT, extra_info['peak_read_memory_bytes']::UBIGINT FROM file_stats
+----
+5000	true	232	3	66363
+
+# Without compression the bodies are stored as they are, so both totals agree
+query I
+SELECT extra_info['total_compressed_size']::UBIGINT = extra_info['total_uncompressed_size']::UBIGINT FROM file_stats
+----
+true
+
+# Compression only shrinks what is stored, the uncompressed total is the same
+statement ok
+CREATE TABLE zstd_stats AS WITH s AS (COPY (SELECT i AS id FROM range(5000) t(i)) TO '{DATA_PATH}/stats_zstd.arrow' (FORMAT ARROW, CHUNK_SIZE 2048, COMPRESSION 'zstd', RETURN_STATS)) SELECT * FROM s
+
+query II
+SELECT z.extra_info['total_compressed_size']::UBIGINT < f.extra_info['total_compressed_size']::UBIGINT, z.extra_info['total_uncompressed_size']::UBIGINT = f.extra_info['total_uncompressed_size']::UBIGINT FROM zstd_stats z, file_stats f
+----
+true	true
+
+# A stream has no footer
+statement ok
+CREATE TABLE stream_stats AS WITH s AS (COPY (SELECT 42 AS i) TO '{DATA_PATH}/stats.arrows' (FORMAT ARROWS, RETURN_STATS)) SELECT * FROM s
+
+query II
+SELECT count, footer_size_bytes FROM stream_stats
+----
+1	NULL
+
+# Every file a COPY writes gets its own row
+statement ok
+CREATE TABLE part_stats AS WITH s AS (COPY (SELECT i AS id FROM range(10000) t(i)) TO '{DATA_PATH}/parts' (FORMAT ARROW, CHUNK_SIZE 2048, ROW_GROUPS_PER_FILE 2, RETURN_STATS)) SELECT * FROM s
+
+query II
+SELECT count(*), sum(count) FROM part_stats
+----
+3	10000

@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 #pragma once
 
+#include "arrow_batch_stats.h"
 #include "duckdb/common/arrow/arrow_converter.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/serializer/async_file_writer.hpp"
@@ -44,7 +45,9 @@ class ColumnDataCollectionSerializer {
   //! Hands the message to the async writer, which frees it once written
   ArrowIpcFileBlock Flush(AsyncFileWriter& writer);
 
-  int64_t UncompressedBodySize() const { return uncompressed_body_size; }
+  //! What the last serialized batch contributes to the file's record batch statistics,
+  //! measured from the batch as written. Only set when tracking body sizes.
+  const ArrowBatchMeasure& BatchMeasure() const { return batch_measure; }
 
   nanoarrow::UniqueBuffer GetHeader();
 
@@ -55,7 +58,7 @@ class ColumnDataCollectionSerializer {
   Allocator& allocator;
   ArrowIpcCompressionOptions compression;
   bool track_body_size;
-  int64_t uncompressed_body_size = 0;
+  ArrowBatchMeasure batch_measure{};
   unordered_map<idx_t, const shared_ptr<ArrowTypeExtensionData>> extension_types;
   nanoarrow::ipc::UniqueEncoder encoder;
   nanoarrow::UniqueArrayView chunk_view;

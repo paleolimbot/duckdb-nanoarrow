@@ -90,6 +90,16 @@ For example, to write a zstd-compressed stream:
 COPY (SELECT 42 as foofy, 'string' as stringy) TO "test.arrows" (COMPRESSION 'zstd');
 ```
 
+`RETURN_STATS` makes `COPY` return one row per written file instead of the row count. `count`, `file_size_bytes` and `footer_size_bytes` describe the file (`footer_size_bytes` is `NULL` for a stream, which has no footer). Record batch statistics are in `extra_info`, so they are also available for remote outputs, where `size_metadata` is not:
+* `record_batch_count`: The number of record batches in the file.
+* `total_compressed_size`: The size of all record batch bodies as stored, including compression prefixes and buffer padding. It excludes message headers, the schema and file framing, and is counted the same way as `size_metadata`.
+* `total_uncompressed_size`: The size of all record batch bodies after decompression, including buffer padding. It equals `total_compressed_size` for uncompressed output.
+* `peak_read_memory_bytes`: An upper bound on the memory a reader needs at any point while decoding the file. It assumes the reader allocates in powers of two, as arrow-java does, and holds two adjacent record batches at once. It counts the metadata a file reader reads with each batch, the validity bitmaps such a reader allocates for columns written without one, and up to 63 bytes of alignment per allocation, so it can also size an arena that aligns each allocation to 64 bytes.
+
+```sql
+COPY (SELECT * FROM range(10000)) TO 's3://bucket/stats.arrow' (RETURN_STATS);
+```
+
 #### Read
 You can consume the file using the `read_arrow` scanner. For example, to read the file we just created, you could run:
 ```sql
