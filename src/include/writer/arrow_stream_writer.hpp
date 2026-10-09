@@ -9,6 +9,7 @@
 #pragma once
 #include "duckdb/common/atomic.hpp"
 #include "duckdb/common/mutex.hpp"
+#include "duckdb/function/copy_function.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "writer/column_data_collection_serializer.hpp"
 
@@ -56,6 +57,8 @@ struct ArrowStreamWriter {
   static void SetTypeMetadata(ArrowSchema& schema, const vector<LogicalType>& types,
                               const string& type_metadata_namespace);
   static bool IsTypeMetadataKey(const string& key, const string& type_metadata_namespace);
+  //! Fills the statistics RETURN_STATS reports for this file once it is finalized
+  void SetWrittenStatistics(CopyFunctionFileStatistics& statistics);
 
  private:
   void WriteFooter();
@@ -77,8 +80,11 @@ struct ArrowStreamWriter {
   unique_ptr<BufferedFileWriter> writer;
   vector<ArrowIpcFileBlock> blocks;
   idx_t schema_message_size = 0;
-  int64_t total_compressed_size = 0;
-  int64_t total_uncompressed_size = 0;
+  //! Set by RETURN_STATS, which also turns on the per batch accounting below
+  optional_ptr<CopyFunctionFileStatistics> written_stats;
+  //! The record batch totals SIZE_METADATA writes and RETURN_STATS reports
+  ArrowBatchStats batch_stats{};
+  Value footer_size_bytes;
   // Rotation checks read these while another thread may be flushing
   atomic<idx_t> row_group_count{0};
   atomic<idx_t> file_size{0};

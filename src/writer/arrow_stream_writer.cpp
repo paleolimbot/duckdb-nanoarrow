@@ -140,6 +140,9 @@ void ArrowStreamWriter::InitSchema(const ArrowSchema& schema_p,
     SetSchemaMetadata(schema.get(), {{kTotalCompressedSize, max_size},
                                      {kTotalUncompressedSize, max_size}});
   }
+  ArrowError error{};
+  THROW_NOT_OK(InternalException, &error,
+               ArrowBatchStatsInit(&batch_stats, schema.get(), file_format, &error));
 }
 
 ArrowStreamWriter::~ArrowStreamWriter() {
@@ -187,8 +190,8 @@ void ArrowStreamWriter::WriteSchema() {
 }
 
 unique_ptr<ColumnDataCollectionSerializer> ArrowStreamWriter::NewSerializer() const {
-  auto serializer = make_uniq<ColumnDataCollectionSerializer>(options, allocator,
-                                                              compression, size_metadata);
+  auto serializer = make_uniq<ColumnDataCollectionSerializer>(
+      options, allocator, compression, size_metadata || written_stats);
   serializer->Init(schema.get(), logical_types);
   return serializer;
 }
@@ -199,9 +202,10 @@ void ArrowStreamWriter::Flush(ColumnDataCollectionSerializer& serializer) {
   if (file_format) {
     blocks.push_back(block);
   }
-  if (size_metadata) {
-    total_compressed_size += block.body_length;
-    total_uncompressed_size += serializer.UncompressedBodySize();
+  if (size_metadata || written_stats) {
+    ArrowBatchStatsAdd(&batch_stats, &serializer.BatchMeasure(), block.metadata_length,
+                       block.body_length,
+                       compression.type != NANOARROW_IPC_COMPRESSION_TYPE_NONE);
   }
   ++row_group_count;
   file_size = TotalWritten();
@@ -219,6 +223,20 @@ void ArrowStreamWriter::Finalize() {
     async_writer->Close();
   } else {
     writer->Close();
+  }
+  if (written_stats) {
+    // Reported by name, like row_group_count for parquet
+    written_stats->row_count = NumericCast<idx_t>(batch_stats.row_count);
+    written_stats->file_size_bytes = file_size;
+    written_stats->footer_size_bytes = footer_size_bytes;
+    auto& extra_info = written_stats->extra_info;
+    extra_info["record_batch_count"] = Value::UBIGINT(batch_stats.record_batch_count);
+    extra_info["total_compressed_size"] =
+        Value::UBIGINT(batch_stats.total_compressed_size);
+    extra_info["total_uncompressed_size"] =
+        Value::UBIGINT(batch_stats.total_uncompressed_size);
+    extra_info["peak_read_memory_bytes"] =
+        Value::UBIGINT(ArrowBatchStatsPeakReadMemoryBytes(&batch_stats));
   }
 }
 
@@ -246,8 +264,8 @@ void ArrowStreamWriter::WriteFooter() {
   if (size_metadata) {
     SetSchemaMetadata(
         footer_schema.get(),
-        {{kTotalCompressedSize, std::to_string(total_compressed_size)},
-         {kTotalUncompressedSize, std::to_string(total_uncompressed_size)}});
+        {{kTotalCompressedSize, std::to_string(batch_stats.total_compressed_size)},
+         {kTotalUncompressedSize, std::to_string(batch_stats.total_uncompressed_size)}});
     // Update the opening schema to match the footer without changing its reserved size
     serializer->SerializeSchema(footer_schema.get(), schema_message_size);
     auto opening_schema = serializer->GetHeader();
@@ -260,6 +278,7 @@ void ArrowStreamWriter::WriteFooter() {
   }
   serializer->SerializeFooter(std::move(footer_schema), blocks);
   auto footer = serializer->GetHeader();
+  footer_size_bytes = Value::UBIGINT(NumericCast<uint64_t>(footer->size_bytes));
   const auto footer_size = BSwapIfBE(NumericCast<int32_t>(footer->size_bytes));
   WriteBytes(footer->data, footer->size_bytes);
   WriteBytes(const_data_ptr_cast(&footer_size), sizeof(footer_size));
@@ -287,6 +306,9 @@ bool ArrowStreamWriter::IsTypeMetadataKey(const string& key,
     }
   }
   return false;
+}
+void ArrowStreamWriter::SetWrittenStatistics(CopyFunctionFileStatistics& statistics) {
+  written_stats = statistics;
 }
 
 bool ArrowStreamWriter::IsSizeMetadataKey(const string& key) {

@@ -173,6 +173,10 @@ idx_t ColumnDataCollectionSerializer::Serialize(ArrowAppender& appender) {
   THROW_NOT_OK(duckdb::InternalException, &error,
                ArrowArrayViewSetArray(chunk_view.get(), array.get(), &error));
   DropUnusedValidity(*chunk_view.get());
+  if (track_body_size) {
+    // Measured as written: uncompressed buffer sizes, the dropped bitmaps at size 0
+    ArrowBatchStatsMeasure(chunk_view.get(), &batch_measure);
+  }
   if (compression.type == NANOARROW_IPC_COMPRESSION_TYPE_NONE) {
     // One exact allocation, where growing buffer by buffer doubles and keeps the peaks
     NANOARROW_THROW_NOT_OK(
@@ -181,12 +185,6 @@ idx_t ColumnDataCollectionSerializer::Serialize(ArrowAppender& appender) {
   THROW_NOT_OK(InternalException, &error,
                ArrowIpcEncoderEncodeSimpleRecordBatch(encoder.get(), chunk_view.get(),
                                                       body.get(), &error));
-  if (track_body_size) {
-    // An uncompressed body already has the padded size, so only compressed ones walk
-    uncompressed_body_size = compression.type == NANOARROW_IPC_COMPRESSION_TYPE_NONE
-                                 ? body->size_bytes
-                                 : PaddedBodySize(*chunk_view.get());
-  }
   NANOARROW_THROW_NOT_OK(
       ArrowIpcEncoderFinalizeBuffer(encoder.get(), true, header.get()));
 

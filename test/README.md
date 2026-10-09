@@ -9,6 +9,11 @@ make test
 # or make test_debug
 ```
 
+The `java` directory holds tests that read the files the extension writes with arrow-java. They need the extension built with `make release`, a JDK (17 or newer) and Maven:
+```bash
+mvn -f test/java/pom.xml test
+```
+
 If you're using CMake + VSCode, you can run
 
 ``` shell
